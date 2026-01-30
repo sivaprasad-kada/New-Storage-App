@@ -1,0 +1,8 @@
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+
+# Storage directory (user request)
+Storage App Backend/storage/
