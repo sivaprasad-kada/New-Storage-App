@@ -1,263 +1,215 @@
-import { createWriteStream } from "fs";
-import { rm } from "fs/promises";
 import path from "path";
-import File from "../models/fileModel.js";
 import Directory from "../models/directoryModel.js";
+import File from "../models/fileModel.js";
 import User from "../models/userModel.js";
-import mongoose from "mongoose";
+import {
+  createGetSignedUrl,
+  createUploadSignedUrl,
+  deleteS3File,
+  getS3FileMetaData,
+} from "../config/s3.js";
 import { getFileCategory } from "../utils/fileCategory.js";
 
-export const uploadFile = async (req, res, next) => {
-  // const filesCollection = await db.collection("files");
-  const parentDirId = req.params.parentDirId || req.user.rootDirId;
-  const parentDirData = await Directory.findOne({
-    _id: parentDirId,
-    userId: req.user._id,
-  }).lean();
-  // console.log("this is from file controller", parentDirData)
-  // Check if parent directory exists
-  if (!parentDirData) {
-    return res.status(404).json({ error: "Parent directory not found!" });
+// Helper to update directory sizes recursively
+export async function updateDirectoriesSize(parentId, deltaSize) {
+  while (parentId) {
+    const dir = await Directory.findById(parentId);
+    if (!dir) break;
+    dir.size += deltaSize;
+    await dir.save();
+    parentId = dir.parentDirId;
   }
-
-  const filename = req.headers.filename || "untitled";
-  const mimetype = req.headers["content-type"];
-  // Parse filesize to integer safely
-  const filesize = parseInt(req.headers.filesize, 10) || 0;
-
-  // max file size limit is 100MB
-  const MAX_LIMIT_MB = 100;
-  const MAX_LIMIT_BYTES = MAX_LIMIT_MB * 1024 * 1024;
-
-  if (filesize > MAX_LIMIT_BYTES) {
-    console.log("File too large");
-    res.header("Connection", "close");
-    return res.status(413).end("");
-  }
-
-  // Check Storage Limit
-  const user = await User.findById(req.user._id);
-  if (user.usedStorageInBytes + filesize > user.maxStorageInBytes) {
-    return res.status(403).json({ error: "Storage limit exceeded. Please buy more storage." });
-  }
-
-  const extension = path.extname(filename);
-  const category = getFileCategory(filename, mimetype);
-
-  const insertedFile = await File.create({
-    extension,
-    name: filename,
-    parentDirId: parentDirData._id,
-    userId: req.user._id,
-    size: filesize,
-    category
-  });
-  const fileId = insertedFile._id.toString();
-  console.log("this is from file controller", insertedFile)
-  const fullFileName = `${fileId}${extension}`;
-  const filePath = `./storage/${fullFileName}`;
-
-  const writeStream = createWriteStream(filePath);
-  // req.pipe(writeStream);
-  let totalFileSize = 0;
-  let aborted = false;
-
-  // Monitor data stream bit-by-bit
-  req.on("data", async (chunk) => {
-    if (aborted) return;
-    totalFileSize += chunk.length;
-
-    // Check if size exceeds declared header size OR global hard limit
-    if (totalFileSize > filesize || totalFileSize > MAX_LIMIT_BYTES) {
-      aborted = true;
-      writeStream.close();
-
-      // Cleanup partial upload
-      try {
-        await insertedFile.deleteOne();
-        await rm(filePath);
-      } catch (err) {
-        console.error("Cleanup error:", err);
-      }
-
-      // Send 413 Response
-      if (!res.headersSent) {
-        return res.status(413).json({ error: "File too large or size mismatch" });
-      }
-      return; // Stop processing
-    }
-    writeStream.write(chunk);
-  });
-
-  req.on("end", async () => {
-    if (aborted) return;
-    let dirId = parentDirId
-    while (dirId) {
-      let parentDirData = await Directory.findById(dirId)
-      parentDirData.size += +filesize; // conversion of string to int
-      parentDirData.save();
-      dirId = parentDirData.parentDirId
-    }
-    // Update User Storage Usage
-    await User.findByIdAndUpdate(req.user._id, {
-      $inc: {
-        usedStorageInBytes: filesize,
-        [`${category}Bytes`]: filesize
-      }
-    });
-
-    return res.status(201).json({ message: "File Uploaded" });
-  });
-
-  req.on("error", async () => {
-    await filesCollection.deleteOne({ _id: insertedFile.insertedId });
-    return res.status(404).json({ message: "Could not Upload File" });
-  });
-};
+}
 
 export const getFile = async (req, res) => {
   const { id } = req.params;
-  const db = req.db;
-  const filesCollection = db.collection("files");
   const fileData = await File.findOne({
     _id: id,
     userId: req.user._id,
-  });
+  }).lean();
+
   // Check if file exists
   if (!fileData) {
     return res.status(404).json({ error: "File not found!" });
   }
 
-  // If "download" is requested, set the appropriate headers
-  const filePath = `${process.cwd()}/storage/${id}${fileData.extension}`;
+  // Handle download or preview via presigned URL
+  try {
+    const download = req.query.action === "download";
+    const fileUrl = await createGetSignedUrl({
+      key: `${id}${fileData.extension}`,
+      download,
+      filename: fileData.name,
+    });
 
-  if (req.query.action === "download") {
-    return res.download(filePath, fileData.name);
+    // Redirect the client to the S3 URL
+    return res.redirect(fileUrl);
+  } catch (err) {
+    console.error("Error generating signed URL:", err);
+    return res.status(500).json({ error: "Could not generate file access URL" });
   }
-
-  // Send file
-  return res.sendFile(filePath, (err) => {
-    if (!res.headersSent && err) {
-      return res.status(404).json({ error: "File not found!" });
-    }
-  });
 };
 
 export const renameFile = async (req, res, next) => {
   const { id } = req.params;
-  const db = req.db;
-  const filesCollection = db.collection("files");
-  /*  const fileData = await File.findOneAndUpdate({
-     _id: id,
-     userId: req.user._id,
-   });
- 
-   // Check if file exists
-   if (!fileData) {
-     return res.status(404).json({ error: "File not found!" });
-   } */
 
   try {
-    const result = await File.findOneAndUpdate(
-      { _id: id, userId: req.user._id },
-      { $set: { name: req.body.newFilename } }
-    );
-    if (result == null) return res.status(404).json({ error: "file not found" })
-    else return res.status(200).json({ message: "Renamed" });
+    const file = await File.findOne({
+      _id: id,
+      userId: req.user._id,
+    });
+
+    // Check if file exists
+    if (!file) {
+      return res.status(404).json({ error: "File not found!" });
+    }
+
+    file.name = req.body.newFilename;
+    await file.save();
+    return res.status(200).json({ message: "Renamed" });
   } catch (err) {
+    console.log(err);
     err.status = 500;
     next(err);
   }
 };
 
-/* export const deleteFile = async (req, res, next) => {
+export const deleteFile = async (req, res, next) => {
   const { id } = req.params;
-  // const db = req.db;
-  const fileData = await File.findOne({
-    _id: id,
-    userId: req.user._id,
-  });
 
-  if (!fileData) {
-    return res.status(404).json({ error: "File not found!" });
-  }
-  let dirId = fileData.parentDirId;
-  console.log("dirId :", dirId)
-  while(dirId){
-    let parentDirData = await Directory.findById(dirId);
-    console.log(parentDirData.parentDirId)
-    parentDirData.size = parentDirData.size - fileData.size
-    dirId = parentDirData.parentDirId
-    console.log(dirId)
-  }
   try {
-    await rm(`./storage/${id}${fileData.extension}`);
-    await File.deleteOne({ _id: fileData._id });
+    const file = await File.findOne({
+      _id: id,
+      userId: req.user._id,
+    });
+
+    if (!file) {
+      return res.status(404).json({ error: "File not found!" });
+    }
+
+    // Delete from S3 first (or DB first, depending on preference; reference deletes DB first but keys off file info)
+    // Reference deleted S3 using file.id+extension
+    const key = `${file.id}${file.extension}`;
+    await deleteS3File(key);
+
+    // Delete from DB
+    await file.deleteOne();
+
+    // Update Directory Sizes
+    await updateDirectoriesSize(file.parentDirId, -file.size);
+
+    // Update User Storage Usage
+    const category = file.category || 'other';
+    await User.findByIdAndUpdate(req.user._id, {
+      $inc: {
+        usedStorageInBytes: -file.size,
+        [`${category}Bytes`]: -file.size // decrease category usage
+      }
+    });
+
     return res.status(200).json({ message: "File Deleted Successfully" });
   } catch (err) {
     next(err);
   }
 };
- */
 
-// the below code is given by gpt to solve the real life issues 
-// 1. Race condition 2.partial failure -> that's why here we use transcations
-export const deleteFile = async (req, res, next) => {
-  const session = await mongoose.startSession();
+export const uploadInitiate = async (req, res) => {
+  const parentDirId = req.body.parentDirId || req.user.rootDirId;
+  try {
+    const parentDirData = await Directory.findOne({
+      _id: parentDirId,
+      userId: req.user._id,
+    });
+
+    // Check if parent directory exists
+    if (!parentDirData) {
+      return res.status(404).json({ error: "Parent directory not found!" });
+    }
+
+    const filename = req.body.name || "untitled";
+    const filesize = parseInt(req.body.size, 10) || 0;
+    const contentType = req.body.contentType || "application/octet-stream";
+
+    const user = await User.findById(req.user._id);
+
+    // Check Storage Limit
+    if (user.usedStorageInBytes + filesize > user.maxStorageInBytes) {
+      return res.status(403).json({ error: "Storage limit exceeded. Please buy more storage." });
+    }
+
+    const extension = path.extname(filename);
+    const category = getFileCategory(filename, contentType);
+
+    const insertedFile = await File.create({
+      extension,
+      name: filename,
+      size: filesize,
+      parentDirId: parentDirData._id,
+      userId: req.user._id,
+      isUploading: true,
+      category,
+    });
+
+    const uploadSignedUrl = await createUploadSignedUrl({
+      key: `${insertedFile.id}${extension}`,
+      contentType: contentType,
+    });
+
+    res.json({ uploadSignedUrl, fileId: insertedFile.id });
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ error: "Failed to initiate upload" });
+  }
+};
+
+export const uploadComplete = async (req, res, next) => {
+  const { fileId } = req.body;
+
+  if (!fileId) {
+    return res.status(400).json({ error: "fileId is required" });
+  }
 
   try {
-    session.startTransaction();
-
-    const { id } = req.params;
-
-    const fileData = await File.findOne(
-      { _id: id, userId: req.user._id },
-      null,
-      { session }
-    );
-
-    if (!fileData) {
-      await session.abortTransaction();
-      return res.status(404).json({ error: "File not found!" });
+    const file = await File.findOne({ _id: fileId, userId: req.user._id });
+    if (!file) {
+      return res.status(404).json({ error: "File not found in our records" });
     }
 
-    let dirId = fileData.parentDirId;
-    const size = fileData.size;
-    const category = fileData.category || 'other'; // Backward compatibility
+    const key = `${file.id}${file.extension}`;
+    const fileData = await getS3FileMetaData(key);
 
-    // 🔥 propagate size decrease to all parent folders
-    while (dirId) {
-      const dir = await Directory.findById(dirId, null, { session });
-
-      await Directory.updateOne(
-        { _id: dirId },
-        { $inc: { size: -size } },
-        { session }
-      );
-
-      dirId = dir.parentDirId;
+    // Verify size matches what was promised (optional strictness)
+    // Checking ContentLength from S3 HeadObject
+    if (fileData.ContentLength != file.size) {
+      // If mismatched, maybe we should update the DB to real size? 
+      // Or reject? Reference implementation deleted the file.
+      // Let's be strict for now as per reference.
+      console.warn(`Size mismatch: DB says ${file.size}, S3 says ${fileData.ContentLength}`);
+      await deleteS3File(key);
+      await file.deleteOne();
+      return res.status(400).json({ error: "Uploaded file size does not match declared size." });
     }
 
-    // Update User Storage Usage (Decrease)
+    file.isUploading = false;
+    await file.save();
+
+    await updateDirectoriesSize(file.parentDirId, file.size);
+
+    // Update User Storage Usage
+    const category = file.category || 'other';
     await User.findByIdAndUpdate(req.user._id, {
       $inc: {
-        usedStorageInBytes: -size,
-        [`${category}Bytes`]: -size
+        usedStorageInBytes: file.size,
+        [`${category}Bytes`]: file.size
       }
-    }, { session });
-    // delete DB record
-    await File.deleteOne({ _id: id }, { session });
-    // delete physical file
-    await rm(`./storage/${id}${fileData.extension}`);
+    });
 
-    await session.commitTransaction();
-    session.endSession();
-
-    return res.status(200).json({ message: "File deleted successfully" });
-
+    res.json({ message: "Upload completed" });
   } catch (err) {
-    await session.abortTransaction();
-    session.endSession();
-    next(err);
+    console.error("Upload complete error:", err);
+    // If we can't verify, we might want to cleanup?
+    // But maybe it's just a transient error.
+    // For now, return error.
+    return res.status(500).json({ error: "Could not verify upload completion." });
   }
 };

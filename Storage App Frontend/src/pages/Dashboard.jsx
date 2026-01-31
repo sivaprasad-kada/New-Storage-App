@@ -4,6 +4,7 @@ import RecentActivity from '../components/RecentActivity';
 import FileDetailsPanel from '../components/FileDetailsPanel';
 import { useNavigate, useParams } from 'react-router-dom';
 import ConfirmationModal from '../components/ConfirmationModal';
+import AlertModal from '../components/AlertModal';
 
 const Dashboard = () => {
     const navigate = useNavigate();
@@ -23,6 +24,10 @@ const Dashboard = () => {
     const [newDirname, setNewDirname] = useState("New Folder");
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [itemToDelete, setItemToDelete] = useState(null);
+
+    // Alert Modal State
+    const [showAlertModal, setShowAlertModal] = useState(false);
+    const [alertConfig, setAlertConfig] = useState({ title: '', message: '', isDanger: false });
 
     // File Input
     const fileInputRef = React.useRef(null);
@@ -117,41 +122,111 @@ const Dashboard = () => {
         e.target.value = ""; // Reset input
     }
 
-    function uploadFile(file) {
+    async function uploadFile(file) {
         // Create temp ID
         const tempId = `temp-${Date.now()}-${Math.random()}`;
 
         // Initial Progress
         setProgressMap(prev => ({ ...prev, [tempId]: 0 }));
 
-        const url = dirId ? `${BASE_URL}/file/${dirId}` : `${BASE_URL}/file/`;
+        try {
+            // 1. Initiate Upload
+            const initUrl = `${BASE_URL}/file/upload/initiate`;
+            const initRes = await fetch(initUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    name: file.name,
+                    size: file.size,
+                    contentType: file.type || "application/octet-stream",
+                    parentDirId: dirId || undefined
+                }),
+                credentials: "include"
+            });
 
-        const xhr = new XMLHttpRequest();
-        xhr.open("POST", url, true);
-        xhr.withCredentials = true;
-        xhr.setRequestHeader("filename", file.name);
-        xhr.setRequestHeader("filesize", file.size);
+            if (!initRes.ok) {
+                const errData = await initRes.json();
 
-        xhr.upload.addEventListener("progress", (evt) => {
-            if (evt.lengthComputable) {
-                const percent = (evt.loaded / evt.total) * 100;
-                setProgressMap(prev => ({ ...prev, [tempId]: percent }));
+                // Handle specific errors clearly
+                if (initRes.status === 413) {
+                    throw new Error(`File "${file.name}" is too large.`);
+                }
+                if (initRes.status === 403) {
+                    throw new Error(`Not enough storage space to upload "${file.name}".`);
+                }
+
+                throw new Error(errData.error || "Upload initiation failed");
             }
-        });
 
-        xhr.onload = () => {
+            const { uploadSignedUrl, fileId } = await initRes.json();
+
+            // 2. Upload to S3
+            await new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open("PUT", uploadSignedUrl, true);
+                xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+
+                xhr.upload.addEventListener("progress", (evt) => {
+                    if (evt.lengthComputable) {
+                        const percent = (evt.loaded / evt.total) * 100;
+                        setProgressMap(prev => ({ ...prev, [tempId]: percent }));
+                    }
+                });
+
+                xhr.onload = () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        resolve();
+                    } else {
+                        reject(new Error("S3 Upload failed"));
+                    }
+                };
+
+                xhr.onerror = () => reject(new Error("Network error during S3 upload"));
+
+                xhr.send(file);
+            });
+
+            // 3. Complete Upload
+            const completeUrl = `${BASE_URL}/file/upload/complete`;
+            const completeRes = await fetch(completeUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    fileId,
+                }),
+                credentials: "include"
+            });
+
+            if (!completeRes.ok) throw new Error("Upload completion failed");
+
             // Refresh list after brief delay
             setTimeout(() => {
                 getDirectoryItems();
             }, 1000);
-        };
 
-        xhr.onerror = () => {
-            console.error("Upload failed");
-            // Optional: Handle error state
-        };
+        } catch (error) {
+            console.error("Upload failed:", error);
 
-        xhr.send(file);
+            // Show Alert Modal
+            setAlertConfig({
+                title: "Upload Failed",
+                message: error.message || `Could not upload "${file.name}".`,
+                isDanger: true
+            });
+            setShowAlertModal(true);
+
+            // Remove from progress map
+            setProgressMap(prev => {
+                const newMap = { ...prev };
+                delete newMap[tempId];
+                return newMap;
+            });
+            // We don't necessarily stop isUploading loop because other files might be uploading logic wraps them
+        }
     }
 
     // Create Folder
@@ -179,15 +254,20 @@ const Dashboard = () => {
     const avgProgress = activeUploads.length ? activeUploads.reduce((a, b) => a + b, 0) / activeUploads.length : 0;
 
     // Auto-hide upload UI when complete
+    // Auto-hide upload UI when complete
     useEffect(() => {
-        if (isUploading && avgProgress === 100) {
-            const t = setTimeout(() => {
-                setIsUploading(false);
-                setProgressMap({});
-            }, 2000);
-            return () => clearTimeout(t);
+        const activeCount = Object.keys(progressMap).length;
+        if (isUploading) {
+            // If all uploads are done (map empty) or valid progress is 100%
+            if (activeCount === 0 || avgProgress === 100) {
+                const t = setTimeout(() => {
+                    setIsUploading(false);
+                    setProgressMap({});
+                }, 2000);
+                return () => clearTimeout(t);
+            }
         }
-    }, [avgProgress, isUploading]);
+    }, [avgProgress, isUploading, progressMap]);
 
     // Navigation & Actions
     function handleRowClick(id) {
@@ -380,8 +460,15 @@ const Dashboard = () => {
                 confirmText="Delete"
                 isDanger={true}
             />
+
+            <AlertModal
+                isOpen={showAlertModal}
+                onClose={() => setShowAlertModal(false)}
+                title={alertConfig.title}
+                message={alertConfig.message}
+                isDanger={alertConfig.isDanger}
+            />
         </div >
     );
 };
-
 export default Dashboard;

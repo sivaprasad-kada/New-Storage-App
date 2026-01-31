@@ -27,6 +27,10 @@ const fileSchema = new Schema(
       enum: ['image', 'video', 'audio', 'document', 'other'],
       default: 'other'
     },
+    isUploading: {
+      type: Boolean,
+      default: false
+    },
   },
   {
     versionKey: false,

@@ -13,10 +13,10 @@ const Shared = () => {
 
     // Mock Data
     const files = [
-        { id: 1, name: 'Project_Alpha_Specs.pdf', type: 'PDF', size: '2.4 MB', sharedBy: 'Sarah Connor', date: '2 days ago', thumb: null },
-        { id: 2, name: 'Office_Party.jpg', type: 'IMG', size: '4.8 MB', sharedBy: 'John Doe', date: '1 week ago', thumb: 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=60' },
-        { id: 3, name: 'Q4_Report.docx', type: 'DOC', size: '1.1 MB', sharedBy: 'Mike Ross', date: 'Yesterday', thumb: null },
-        { id: 4, name: 'Design_System_v2.fig', type: 'FIG', size: '15 MB', sharedBy: 'You', date: 'Just now', thumb: null },
+        // { id: 1, name: 'Project_Alpha_Specs.pdf', type: 'PDF', size: '2.4 MB', sharedBy: 'Sarah Connor', date: '2 days ago', thumb: null },
+        // { id: 2, name: 'Office_Party.jpg', type: 'IMG', size: '4.8 MB', sharedBy: 'John Doe', date: '1 week ago', thumb: 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=60' },
+        // { id: 3, name: 'Q4_Report.docx', type: 'DOC', size: '1.1 MB', sharedBy: 'Mike Ross', date: 'Yesterday', thumb: null },
+        // { id: 4, name: 'Design_System_v2.fig', type: 'FIG', size: '15 MB', sharedBy: 'You', date: 'Just now', thumb: null },
     ];
 
     return (
@@ -31,8 +31,8 @@ const Shared = () => {
                     <button
                         onClick={() => setActiveTab('withMe')}
                         className={`px-4 sm:px-6 py-2 rounded-lg transition-all text-sm sm:text-base ${activeTab === 'withMe'
-                                ? 'bg-white dark:bg-slate-600 text-brand-primary shadow-sm'
-                                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                            ? 'bg-white dark:bg-slate-600 text-brand-primary shadow-sm'
+                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                             }`}
                     >
                         Shared with me
@@ -40,8 +40,8 @@ const Shared = () => {
                     <button
                         onClick={() => setActiveTab('byMe')}
                         className={`px-4 sm:px-6 py-2 rounded-lg transition-all text-sm sm:text-base ${activeTab === 'byMe'
-                                ? 'bg-white dark:bg-slate-600 text-brand-primary shadow-sm'
-                                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                            ? 'bg-white dark:bg-slate-600 text-brand-primary shadow-sm'
+                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                             }`}
                     >
                         Shared by me
