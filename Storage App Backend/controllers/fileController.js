@@ -9,6 +9,7 @@ import {
   getS3FileMetaData,
 } from "../config/s3.js";
 import { getFileCategory } from "../utils/fileCategory.js";
+import redisClient from "../config/redis.js";
 
 // Helper to update directory sizes recursively
 export async function updateDirectoriesSize(parentId, deltaSize) {
@@ -23,6 +24,18 @@ export async function updateDirectoriesSize(parentId, deltaSize) {
 
 export const getFile = async (req, res) => {
   const { id } = req.params;
+
+  // 1. Check Redis Cache for Signed URL
+  const cacheKey = `file:url:${id}`;
+  try {
+    const cachedUrl = await redisClient.get(cacheKey);
+    if (cachedUrl) {
+      return res.redirect(cachedUrl);
+    }
+  } catch (err) {
+    console.error("Redis error:", err);
+  }
+
   const fileData = await File.findOne({
     _id: id,
     userId: req.user._id,
@@ -41,6 +54,9 @@ export const getFile = async (req, res) => {
       download,
       filename: fileData.name,
     });
+
+    // 2. Cache the new URL (TTL 290s to be safe within 300s limit)
+    await redisClient.set(cacheKey, fileUrl, { EX: 290 });
 
     // Redirect the client to the S3 URL
     return res.redirect(fileUrl);
@@ -66,6 +82,10 @@ export const renameFile = async (req, res, next) => {
 
     file.name = req.body.newFilename;
     await file.save();
+
+    // Invalidate Cache
+    await redisClient.del(`directory:${file.parentDirId}`);
+
     return res.status(200).json({ message: "Renamed" });
   } catch (err) {
     console.log(err);
@@ -87,28 +107,49 @@ export const deleteFile = async (req, res, next) => {
       return res.status(404).json({ error: "File not found!" });
     }
 
-    // Delete from S3 first (or DB first, depending on preference; reference deletes DB first but keys off file info)
-    // Reference deleted S3 using file.id+extension
-    const key = `${file.id}${file.extension}`;
-    await deleteS3File(key);
-
-    // Delete from DB
+    // --- ASYNC OPTIMIZATION ---
+    // 1. Delete from DB immediately (Fast)
     await file.deleteOne();
 
-    // Update Directory Sizes
-    await updateDirectoriesSize(file.parentDirId, -file.size);
+    // 2. Respond to Client immediately
+    res.status(200).json({ message: "File Deleted Successfully" });
 
-    // Update User Storage Usage
-    const category = file.category || 'other';
-    await User.findByIdAndUpdate(req.user._id, {
-      $inc: {
-        usedStorageInBytes: -file.size,
-        [`${category}Bytes`]: -file.size // decrease category usage
+    // 3. Perform Cleanups Asynchronously (Fire & Forget)
+    (async () => {
+      try {
+        // Delete from S3
+        const key = `${file.id}${file.extension}`;
+        await deleteS3File(key);
+      } catch (s3Err) {
+        console.error(`Failed to delete S3 file ${file.id}:`, s3Err);
+        // Optional: Re-queue or log to a dead-letter queue
       }
-    });
 
-    return res.status(200).json({ message: "File Deleted Successfully" });
+      try {
+        // Update Directory Sizes
+        await updateDirectoriesSize(file.parentDirId, -file.size);
+
+        // Update User Storage Usage
+        const category = file.category || 'other';
+        await User.findByIdAndUpdate(req.user._id, {
+          $inc: {
+            usedStorageInBytes: -file.size,
+            [`${category}Bytes`]: -file.size
+          }
+        });
+
+        // Invalidate Redis Cache for the parent directory listing
+        await redisClient.del(`directory:${file.parentDirId}`);
+        // Also invalidate the file URL if cached
+        await redisClient.del(`file:url:${id}`);
+
+      } catch (cleanupErr) {
+        console.error("Error during background cleanup:", cleanupErr);
+      }
+    })();
+
   } catch (err) {
+    // If DB delete fails, we pass error to next()
     next(err);
   }
 };
@@ -203,6 +244,9 @@ export const uploadComplete = async (req, res, next) => {
         [`${category}Bytes`]: file.size
       }
     });
+
+    // Invalidate Cache for Parent Directory
+    await redisClient.del(`directory:${file.parentDirId}`);
 
     res.json({ message: "Upload completed" });
   } catch (err) {

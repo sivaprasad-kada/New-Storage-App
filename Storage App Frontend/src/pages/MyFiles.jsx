@@ -271,26 +271,54 @@ const MyFiles = () => {
     async function executeDelete() {
         if (!itemToDelete) return;
 
-        try {
-            const isDir = itemToDelete.isDirectory || (itemToDelete.tags && itemToDelete.tags.includes('folder'));
-            const endpoint = isDir ? 'directory' : 'file';
-            const id = itemToDelete.id || itemToDelete._id;
+        // Optimistic UI Update
+        const previousFiles = [...filesList];
+        const previousDirs = [...directoriesList];
+        const isDir = itemToDelete.isDirectory || (itemToDelete.tags && itemToDelete.tags.includes('folder'));
+        const id = itemToDelete.id || itemToDelete._id;
 
+        // Remove immediately from UI
+        if (isDir) {
+            setDirectoriesList(prev => prev.filter(d => (d.id || d._id) !== id));
+        } else {
+            setFilesList(prev => prev.filter(f => (f.id || f._id) !== id));
+        }
+
+        // Close modal immediately
+        setShowDeleteModal(false);
+
+        try {
+            const endpoint = isDir ? 'directory' : 'file';
             const response = await fetch(`${BASE_URL}/${endpoint}/${id}`, {
                 method: "DELETE",
                 credentials: "include",
             });
 
-            if (!response.ok) throw new Error("Failed to delete item");
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || "Failed to delete item");
+            }
 
             if (selectedFile && (selectedFile.id === id || selectedFile._id === id)) {
                 setSelectedFile(null);
             }
 
-            getDirectoryItems();
+            // Optional: Silently sync to ensure truth
+            // getDirectoryItems(); 
+
         } catch (error) {
             console.error(error);
+            // Revert on failure
+            setDirectoriesList(previousDirs);
+            setFilesList(previousFiles);
             setErrorMessage(error.message);
+            // Show alert
+            setAlertConfig({
+                title: "Deletion Failed",
+                message: error.message,
+                isDanger: true
+            });
+            setShowAlertModal(true);
         } finally {
             setItemToDelete(null);
         }

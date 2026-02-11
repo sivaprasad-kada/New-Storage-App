@@ -23,6 +23,7 @@
     "mime-types": "^2.1.35",
     "mongodb": "^7.0.0",
     "mongoose": "^8.12.1",
+    "redis": "^5.10.0",
     "resend": "^6.6.0"
   },
   "devDependencies": {
