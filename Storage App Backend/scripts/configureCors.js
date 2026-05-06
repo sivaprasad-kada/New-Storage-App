@@ -36,9 +36,9 @@ const run = async () => {
 
     try {
         await s3Client.send(command);
-        console.log("✅ Successfully updated S3 CORS configuration!");
+        console.log(" Successfully updated S3 CORS configuration!");
     } catch (err) {
-        console.error("❌ Error updating CORS configuration:", err);
+        console.error(" Error updating CORS configuration:", err);
     }
 };
 

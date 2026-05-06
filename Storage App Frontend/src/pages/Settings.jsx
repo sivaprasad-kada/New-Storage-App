@@ -21,7 +21,7 @@ const Settings = () => {
     useEffect(() => {
         const fetchUser = async () => {
             try {
-                const res = await fetch('http://localhost:4000/user/', { credentials: 'include' });
+                const res = await fetch(`${import.meta.env.VITE_BASE_URL}/user/`, { credentials: 'include' });
                 if (res.ok) {
                     const data = await res.json();
                     setUser(data);
@@ -37,7 +37,7 @@ const Settings = () => {
 
     const handleLogout = async () => {
         try {
-            const res = await fetch('http://localhost:4000/user/logout', {
+            const res = await fetch(`${import.meta.env.VITE_BASE_URL}/user/logout`, {
                 method: 'POST',
                 credentials: 'include'
             });
@@ -55,7 +55,7 @@ const Settings = () => {
 
     const executeLogoutAll = async () => {
         try {
-            const res = await fetch('http://localhost:4000/user/logoutAll', {
+            const res = await fetch(`${import.meta.env.VITE_BASE_URL}/user/logoutAll`, {
                 method: 'POST',
                 credentials: 'include'
             });

@@ -4,6 +4,7 @@ const Schema = new mongoose.Schema({
         type : mongoose.Types.ObjectId,
         required : true
     },
+    // createdAt is mandatory for ttl doucments to implement auto delete functonality by the mongodb process
     createdAt :{
         type : Date,
         default : Date.now,

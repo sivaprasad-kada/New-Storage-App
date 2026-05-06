@@ -1,10 +1,16 @@
-import React, { useState } from 'react';
-import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, FileText, Share2, Search, Database, Settings, Moon, Sun, Lock, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
+import { LayoutDashboard, FileText, Share2, Search, Database, Settings, Moon, Sun, Lock, X, CreditCard } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 
 const Sidebar = () => {
     const { isDarkMode, setIsDarkMode, isMobileMenuOpen, closeSidebar, isSidebarHidden } = useTheme();
+    const location = useLocation();
+
+    // Auto-close mobile sidebar on route change
+    useEffect(() => {
+        closeSidebar();
+    }, [location.pathname]);
 
     const navItems = [
         { name: 'HOME', path: '/dashboard', icon: LayoutDashboard },
@@ -12,6 +18,7 @@ const Sidebar = () => {
         { name: 'Shared', path: '/shared', icon: Share2, hasNotification: true },
         // ... (rest of items)
         { name: 'Storage', path: '/storage', icon: Database },
+        { name: 'Subscription', path: '/payment', icon: CreditCard },
         { name: 'Settings', path: '/settings', icon: Settings },
     ];
 

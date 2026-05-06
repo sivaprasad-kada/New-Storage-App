@@ -12,6 +12,8 @@ import SecureVault from './pages/SecureVault';
 import Settings from './pages/Settings';
 import Shared from './pages/Shared';
 import MyFiles from './pages/MyFiles';
+import SharedLink from './pages/SharedLink';
+import Payment from './pages/Payment';
 
 // Placeholder for missing components
 const Placeholder = ({ title }) => (
@@ -38,7 +40,7 @@ const AppLayout = ({ children }) => {
 import { GoogleOAuthProvider } from '@react-oauth/google';
 
 function App() {
-  const GOOGLE_CLIENT_ID = "96688087178-bg6oivbr3np7j54lad3iioboivlta4qp.apps.googleusercontent.com";
+  const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
@@ -49,6 +51,7 @@ function App() {
             {/*   <Route path="/signin" element={<Navigate to="/auth" replace />} />
             <Route path="/signup" element={<Navigate to="/auth" replace />} /> */}
             <Route path="/user/github/callback" element={<GitHubCallback />} />
+            <Route path="/s/:token" element={<SharedLink />} />
             {/* Protected Routes Wrapper */}
             <Route path="/*" element={
               <AppLayout>
@@ -61,6 +64,7 @@ function App() {
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/shared" element={<Shared />} />
                   <Route path="/my-files" element={<MyFiles />} />
+                  <Route path="/payment" element={<Payment />} />
                   <Route path="/search" element={<Placeholder title="Search" />} />
                 </Routes>
               </AppLayout>

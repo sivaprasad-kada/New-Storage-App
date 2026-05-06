@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { Upload, Trash2, FileText, Database, Image as ImageIcon, Video, Music, Box } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const Storage = () => {
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
+    const navigate = useNavigate();
 
     useEffect(() => {
         const fetchStats = async () => {
             try {
-                const response = await fetch('http://localhost:4000/user/', {
+                const response = await fetch(`${import.meta.env.VITE_BASE_URL}/user/`, {
                     credentials: 'include',
                 });
                 if (response.ok) {
@@ -141,7 +143,7 @@ const Storage = () => {
                     {/* Action Buttons */}
                     <div className="bg-gray-100 dark:bg-slate-800/50 p-6 rounded-2xl border border-gray-200 dark:border-slate-700">
                         <div className="flex flex-col gap-3">
-                            <button className="w-full bg-brand-primary hover:bg-brand-secondary text-white font-bold py-3 rounded-full flex items-center justify-center gap-2 shadow-sm transition-colors cursor-not-allowed opacity-80">
+                            <button onClick={() => navigate('/payment')} className="w-full bg-brand-primary hover:bg-brand-secondary text-white font-bold py-3 rounded-full flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer">
                                 <Upload size={18} /> Upgrade plan
                             </button>
                             <button className="w-full bg-white hover:bg-gray-50 dark:bg-slate-700 dark:hover:bg-slate-600 text-black dark:text-white font-bold py-3 rounded-full flex items-center justify-center gap-2 border border-gray-300 dark:border-slate-600 shadow-sm transition-colors">

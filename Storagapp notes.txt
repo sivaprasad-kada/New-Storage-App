@@ -1,0 +1,66 @@
+AI FEAUTRES
+1. File Upload + Storage
+2. Hash-based Duplicate Detection
+3. AI Tagging
+4. Semantic Search
+Frontend Pages 
+1.On Boarding Page to get Start when user click it goes to -> SignIn/login page->Homepage
+2.Homepage
+	In home page all things are there we have upload,download,creating new folders all this futures in the home screen
+eg. when user click download file download point will call in backend
+3.My files page -> here we show all files and folder of the in this page
+when user open this page the the files related should fetch from the db through backend and show on fronted
+4.shared page
+in this page user can share anyfile or if anyone share a file with him those files also appeared here and from home page also he can share files
+5.secure valut page 
+the page is to hide files before entering to the page the user should enter password to see the hidden files
+6.settings page
+here the user related settings are there in this page
+7.payment page
+in home page we have storeupgradation button if user click that it should redirect to payment page
+Clear TimeLine To Complete Storage App
+28/01/26
+targeted pages : DashBoard,MyFiles
+29/01/26
+Targeted pages : shared and Storage
+30/01/26
+Targeted page : Secure Vault,settings page
+-------------------------
+AI FEAUTERS,PAYMENT INTEGREATION
+-----------------------------
+Preview Details page Archetecure
+Frontend
+  ↓ (signed URL)
+S3 (original upload)
+  ↓ (ObjectCreated event)
+AWS Lambda
+  ↓
+Generate thumbnail & preview
+  ↓
+Save back to S3
+-----------------------------------
+30/01/26
+Today My health was not good,i felt headache i don't know why that's why i didn't do any work on project
+-----------------------------------------------
+31/01/26
+1.upload to aws and import drive features [ first i should implement this future after that i move to next page ].
+2.File Sharing Future
+--------------------------------------
+
+important maxage property in cors policy
+issue : if seesion in delted in db and in browser we have token,we have token,but not session in db,but user still login [actually user should logout but not happened this] once i have to rectify this
+issue : weak passwords are allowed and otps are going in spam folder and also GitHub login system have to be check once
+feauture : whole folder downloading
+issue : have to more about preflight request and also if upload multiple files for every file one preflight request is sent why 1 request is to not enough... and also for deleting file 2 seconds it takes and also it disturb the user experience after deleting the file the ui was state was changed have to work on this
+
+BullMQ / RabbitMQ (instead of Kafka)
+Kafka
+
+
+Reids + BullMQ -> tomorrow i should revise aws and redis and have to complete pending notes
+and have to be clear about new feature implementations and also about scaleing
+1.code indepth understanding
+2.new feature implementation
+3.scaleling
+-------------------------------------------------------------------------------------------------------
+Date : 29/04/26

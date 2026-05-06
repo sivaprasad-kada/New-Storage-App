@@ -187,7 +187,7 @@ const Auth = () => {
         setOtp("");
         setTimer(0);
     };
-    const BASE_URL = "http://localhost:4000";
+    const BASE_URL = "http://localhost:5000";
     const handleFormSubmit = (e) => {
         e.preventDefault();
         if (isSignIn) {

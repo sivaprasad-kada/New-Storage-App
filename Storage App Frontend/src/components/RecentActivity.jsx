@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Download, LayoutGrid, List, ArrowRight, Info, File, Image, Video, FileText, Folder, FileArchive, Code } from 'lucide-react';
 
-const RecentActivity = ({ files = [], onNavigate, onFileClick, onDownload, onDelete, onDetailsClick }) => {
+const RecentActivity = ({ files = [], onNavigate, onFileClick, onDownload, onDelete, onDetailsClick, onShare }) => {
     // Persist view preference
     const [viewMode, setViewMode] = useState(() => {
         return localStorage.getItem('recentActivityView') || 'grid';
@@ -121,16 +121,25 @@ const RecentActivity = ({ files = [], onNavigate, onFileClick, onDownload, onDel
                                                     e.stopPropagation();
                                                     onDetailsClick && onDetailsClick(file);
                                                 }}
-                                                className="flex items-center gap-1 text-xs font-bold text-black dark:text-white hover:underline"
+                                                className="flex items-center gap-1 text-xs font-bold text-black dark:text-white hover:underline cursor-pointer"
                                             >
                                                 <Info size={12} className="text-gray-500 dark:text-gray-400" /> <span className="hidden sm:inline">Details</span>
                                             </button>
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
+                                                    onShare && onShare(file);
+                                                }}
+                                                className="flex items-center gap-1 text-xs font-bold text-black dark:text-white hover:underline cursor-pointer"
+                                            >
+                                                <span className="hidden sm:inline">Share</span>
+                                            </button>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
                                                     onDownload && onDownload(file);
                                                 }}
-                                                className="flex items-center gap-1 text-xs font-bold text-brand-primary hover:underline"
+                                                className="flex items-center gap-1 text-xs font-bold text-brand-primary hover:underline cursor-pointer"
                                             >
                                                 <Download size={12} /> <span className="hidden sm:inline">Download</span>
                                             </button>

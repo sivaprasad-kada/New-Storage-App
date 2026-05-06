@@ -3,7 +3,7 @@ import { X, Download, Share2, Trash2, Info, FileText, Calendar, HardDrive, User,
 
 import { useTheme } from '../context/ThemeContext';
 
-const FileDetailsPanel = ({ file, isOpen, onClose, onDownload, onDelete, inline = false }) => {
+const FileDetailsPanel = ({ file, isOpen, onClose, onDownload, onDelete, onShare, inline = false }) => {
     const [isVisible, setIsVisible] = useState(false);
     const { setSidebarHidden } = useTheme();
 
@@ -16,6 +16,11 @@ const FileDetailsPanel = ({ file, isOpen, onClose, onDownload, onDelete, inline 
             setSidebarHidden(false);
             return () => clearTimeout(timer);
         }
+
+        // Cleanup: ensure sidebar is restored when component unmounts
+        return () => {
+            setSidebarHidden(false);
+        };
     }, [isOpen, setSidebarHidden, inline]);
 
     if (!isVisible && !isOpen) return null;
@@ -147,17 +152,19 @@ const FileDetailsPanel = ({ file, isOpen, onClose, onDownload, onDelete, inline 
                 <div className="p-6 bg-gray-50 dark:bg-slate-850 border-t border-gray-100 dark:border-slate-800 grid grid-cols-3 gap-3">
                     <button
                         onClick={() => onDownload && onDownload(file)}
-                        className="flex flex-col items-center justify-center p-3 rounded-xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 shadow-sm hover:bg-brand-primary hover:text-white hover:border-brand-primary transition-all group">
+                        className="flex flex-col items-center justify-center p-3 rounded-xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 shadow-sm hover:bg-brand-primary hover:text-white hover:border-brand-primary transition-all group cursor-pointer">
                         <Download size={20} className="mb-1 text-gray-700 dark:text-gray-300 group-hover:text-white" />
                         <span className="text-xs font-bold">Download</span>
                     </button>
-                    <button className="flex flex-col items-center justify-center p-3 rounded-xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 shadow-sm hover:bg-brand-primary hover:text-white hover:border-brand-primary transition-all group">
+                    <button 
+                        onClick={() => onShare && onShare(file)}
+                        className="flex flex-col items-center justify-center p-3 rounded-xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 shadow-sm hover:bg-brand-primary hover:text-white hover:border-brand-primary transition-all group cursor-pointer">
                         <Share2 size={20} className="mb-1 text-gray-700 dark:text-gray-300 group-hover:text-white" />
                         <span className="text-xs font-bold">Share</span>
                     </button>
                     <button
                         onClick={() => onDelete && onDelete(file)}
-                        className="flex flex-col items-center justify-center p-3 rounded-xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 shadow-sm hover:bg-red-500 hover:text-white hover:border-red-500 transition-all group">
+                        className="flex flex-col items-center justify-center p-3 rounded-xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 shadow-sm hover:bg-red-500 hover:text-white hover:border-red-500 transition-all group cursor-pointer">
                         <Trash2 size={20} className="mb-1 text-gray-700 dark:text-gray-300 group-hover:text-white" />
                         <span className="text-xs font-bold">Delete</span>
                     </button>

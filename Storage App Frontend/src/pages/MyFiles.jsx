@@ -5,10 +5,11 @@ import FileDetailsPanel from '../components/FileDetailsPanel';
 import { useNavigate } from 'react-router-dom';
 import ConfirmationModal from '../components/ConfirmationModal';
 import AlertModal from '../components/AlertModal';
+import ShareModal from '../components/ShareModal';
 
 const MyFiles = () => {
     const navigate = useNavigate();
-    const BASE_URL = "http://localhost:4000";
+    const BASE_URL = import.meta.env.VITE_BASE_URL;
 
     const [directoriesList, setDirectoriesList] = useState([]);
     const [filesList, setFilesList] = useState([]);
@@ -22,6 +23,10 @@ const MyFiles = () => {
     const [newDirname, setNewDirname] = useState("New Folder");
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [itemToDelete, setItemToDelete] = useState(null);
+
+    // Share Modal State
+    const [showShareModal, setShowShareModal] = useState(false);
+    const [itemToShare, setItemToShare] = useState(null);
 
     // Alert Modal State
     const [showAlertModal, setShowAlertModal] = useState(false);
@@ -324,6 +329,40 @@ const MyFiles = () => {
         }
     }
 
+    function handleShareClick(file) {
+        if (file.isDirectory) {
+            setAlertConfig({ title: 'Cannot share folder', message: 'Folder sharing is coming soon.', isDanger: false });
+            setShowAlertModal(true);
+            return;
+        }
+        setItemToShare(file);
+        setShowShareModal(true);
+    }
+
+    async function executeShare(shareOptions) {
+        if (!itemToShare) return;
+        const id = itemToShare.id || itemToShare._id;
+        const response = await fetch(`${BASE_URL}/api/files/${id}/share`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(shareOptions),
+            credentials: "include",
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            if (errorData.emailNotFound) {
+                const err = new Error("User not found");
+                err.emailNotFound = true;
+                throw err;
+            }
+            throw new Error(errorData.error || "Failed to create share link");
+        }
+        return await response.json();
+    }
+
     return (
         <div className="flex relative h-full gap-4 transition-all duration-300 overflow-hidden">
             {/* Main Content Area */}
@@ -404,7 +443,6 @@ const MyFiles = () => {
                     </div>
                 )}
 
-                {/* Recent Activity (as file list) */}
                 <RecentActivity
                     files={combinedItems}
                     onNavigate={handleRowClick}
@@ -412,6 +450,7 @@ const MyFiles = () => {
                     onDownload={handleDownload}
                     onDelete={handleDelete}
                     onDetailsClick={setSelectedFile}
+                    onShare={handleShareClick}
                 />
             </div>
 
@@ -424,6 +463,7 @@ const MyFiles = () => {
                         onClose={() => setSelectedFile(null)}
                         onDownload={handleDownload}
                         onDelete={handleDelete}
+                        onShare={handleShareClick}
                         inline={true}
                     />
                 </div>
@@ -438,6 +478,13 @@ const MyFiles = () => {
                 message={`Are you sure you want to delete "${itemToDelete?.name}"? This action cannot be undone.`}
                 confirmText="Delete"
                 isDanger={true}
+            />
+
+            <ShareModal 
+                isOpen={showShareModal}
+                onClose={() => setShowShareModal(false)}
+                file={itemToShare}
+                onShare={executeShare}
             />
 
             <AlertModal

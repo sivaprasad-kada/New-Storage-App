@@ -36,10 +36,22 @@ export const getFile = async (req, res) => {
     console.error("Redis error:", err);
   }
 
-  const fileData = await File.findOne({
+  let fileData = await File.findOne({
     _id: id,
     userId: req.user._id,
   }).lean();
+
+  if (!fileData) {
+    // Check if it's shared with the user
+    const FileShare = (await import("../models/fileshareModel.js")).default;
+    const share = await FileShare.findOne({ fileId: id, receiverId: req.user._id });
+    if (share) {
+      if (req.query.action === "download" && share.permission === "view") {
+        return res.status(403).json({ error: "Permission denied. View only access." });
+      }
+      fileData = await File.findById(id).lean();
+    }
+  }
 
   // Check if file exists
   if (!fileData) {
@@ -70,10 +82,22 @@ export const renameFile = async (req, res, next) => {
   const { id } = req.params;
 
   try {
-    const file = await File.findOne({
+    let file = await File.findOne({
       _id: id,
       userId: req.user._id,
     });
+
+    if (!file) {
+      const FileShare = (await import("../models/fileshareModel.js")).default;
+      const share = await FileShare.findOne({ fileId: id, receiverId: req.user._id });
+      if (share) {
+        if (share.permission === "view") {
+          return res.status(403).json({ error: "Permission denied. View only access." });
+        } else if (share.permission === "edit") {
+          file = await File.findById(id);
+        }
+      }
+    }
 
     // Check if file exists
     if (!file) {

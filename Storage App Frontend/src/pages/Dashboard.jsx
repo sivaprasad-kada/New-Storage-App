@@ -5,11 +5,12 @@ import FileDetailsPanel from '../components/FileDetailsPanel';
 import { useNavigate, useParams } from 'react-router-dom';
 import ConfirmationModal from '../components/ConfirmationModal';
 import AlertModal from '../components/AlertModal';
+import ShareModal from '../components/ShareModal';
 
 const Dashboard = () => {
     const navigate = useNavigate();
     const { dirId } = useParams();
-    const BASE_URL = "http://localhost:4000";
+    const BASE_URL = import.meta.env.VITE_BASE_URL;
 
     const [directoryName, setDirectoryName] = useState("My Drive");
     const [directoriesList, setDirectoriesList] = useState([]);
@@ -28,6 +29,10 @@ const Dashboard = () => {
     // Alert Modal State
     const [showAlertModal, setShowAlertModal] = useState(false);
     const [alertConfig, setAlertConfig] = useState({ title: '', message: '', isDanger: false });
+
+    // Share Modal State
+    const [showShareModal, setShowShareModal] = useState(false);
+    const [itemToShare, setItemToShare] = useState(null);
 
     // File Input
     const fileInputRef = React.useRef(null);
@@ -352,6 +357,35 @@ const Dashboard = () => {
         }
     }
 
+    function handleShareClick(file) {
+        if (file.isDirectory) {
+            setAlertConfig({ title: 'Cannot share folder', message: 'Folder sharing is coming soon.', isDanger: false });
+            setShowAlertModal(true);
+            return;
+        }
+        setItemToShare(file);
+        setShowShareModal(true);
+    }
+
+    async function executeShare(shareOptions) {
+        if (!itemToShare) return;
+        const id = itemToShare.id || itemToShare._id;
+        const response = await fetch(`${BASE_URL}/api/files/${id}/share`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(shareOptions),
+            credentials: "include",
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || "Failed to create share link");
+        }
+        return await response.json();
+    }
+
     return (
         <div className="flex relative h-full gap-4 transition-all duration-300 overflow-hidden">
             {/* Main Content Area */}
@@ -458,6 +492,7 @@ const Dashboard = () => {
                     onDownload={handleDownload}
                     onDelete={handleDelete}
                     onDetailsClick={setSelectedFile}
+                    onShare={handleShareClick}
                 />
             </div>
 
@@ -471,6 +506,7 @@ const Dashboard = () => {
                         onClose={() => setSelectedFile(null)}
                         onDownload={handleDownload}
                         onDelete={handleDelete}
+                        onShare={handleShareClick}
                         inline={true}
                     />
                 </div>
@@ -485,6 +521,13 @@ const Dashboard = () => {
                 message={`Are you sure you want to delete "${itemToDelete?.name}"? This action cannot be undone.`}
                 confirmText="Delete"
                 isDanger={true}
+            />
+
+            <ShareModal 
+                isOpen={showShareModal}
+                onClose={() => setShowShareModal(false)}
+                file={itemToShare}
+                onShare={executeShare}
             />
 
             <AlertModal
