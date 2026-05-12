@@ -14,6 +14,7 @@ import Shared from './pages/Shared';
 import MyFiles from './pages/MyFiles';
 import SharedLink from './pages/SharedLink';
 import Payment from './pages/Payment';
+import LandingPage from './pages/Landing/LandingPage';
 
 // Placeholder for missing components
 const Placeholder = ({ title }) => (
@@ -47,6 +48,7 @@ function App() {
       <ThemeProvider>
         <Router>
           <Routes>
+            <Route path="/" element={<LandingPage />} />
             <Route path="/auth" element={<Auth />} />
             {/*   <Route path="/signin" element={<Navigate to="/auth" replace />} />
             <Route path="/signup" element={<Navigate to="/auth" replace />} /> */}

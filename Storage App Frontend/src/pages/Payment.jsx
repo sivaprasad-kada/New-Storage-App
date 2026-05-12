@@ -1,12 +1,45 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Check, Zap, Shield, Crown, Star, ArrowRight, HardDrive, Users, Clock, Infinity, Sparkles, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import { toast } from 'react-toastify';
+
+const loadRazorpay = () => {
+    return new Promise((resolve) => {
+        const script = document.createElement('script');
+        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+        script.onload = () => resolve(true);
+        script.onerror = () => resolve(false);
+        document.body.appendChild(script);
+    });
+};
 
 const Payment = () => {
     const navigate = useNavigate();
     const [billingCycle, setBillingCycle] = useState('monthly');
     const [selectedPlan, setSelectedPlan] = useState(null);
     const [showCheckout, setShowCheckout] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+    const [userPlan, setUserPlan] = useState('free'); // Will be updated if user data is passed/fetched
+
+    useEffect(() => {
+        // Fetch current user details to check their plan
+        const fetchUserPlan = async () => {
+            try {
+                const response = await axios.get(`${import.meta.env.VITE_BASE_URL}/user`, {
+                    withCredentials: true,
+                });
+                if (response.data && response.data.plan) {
+                    setUserPlan(response.data.plan || 'free');
+                } else if (response.data && response.data.user) {
+                    setUserPlan(response.data.user.plan || 'free');
+                }
+            } catch (error) {
+                console.error("Failed to fetch user plan", error);
+            }
+        };
+        fetchUserPlan();
+    }, []);
 
     const plans = [
         {
@@ -16,31 +49,30 @@ const Payment = () => {
             description: 'Perfect for getting started',
             monthlyPrice: 0,
             yearlyPrice: 0,
-            storage: '500 MB',
+            storage: '1 GB',
             color: 'from-gray-500 to-gray-600',
             bgGlow: 'group-hover:shadow-gray-200 dark:group-hover:shadow-gray-800',
             features: [
-                { text: '500 MB Storage', icon: <HardDrive size={14} /> },
+                { text: '1 GB Storage', icon: <HardDrive size={14} /> },
                 { text: 'Basic file sharing', icon: <Users size={14} /> },
                 { text: 'Link sharing', icon: <ArrowRight size={14} /> },
                 { text: '7 day link expiry', icon: <Clock size={14} /> },
             ],
             limitations: ['No password protection', 'No priority support'],
-            isCurrent: true,
         },
         {
-            id: 'pro',
-            name: 'Pro',
+            id: 'basic',
+            name: 'Basic',
             icon: <Zap size={24} />,
-            description: 'For power users and teams',
-            monthlyPrice: 9.99,
-            yearlyPrice: 99.99,
-            storage: '50 GB',
+            description: 'For active users and creators',
+            monthlyPrice: 99,
+            yearlyPrice: 1099,
+            storage: '100 GB',
             color: 'from-brand-primary to-brand-secondary',
             bgGlow: 'group-hover:shadow-brand-primary/20',
             popular: true,
             features: [
-                { text: '50 GB Storage', icon: <HardDrive size={14} /> },
+                { text: '100 GB Storage', icon: <HardDrive size={14} /> },
                 { text: 'Unlimited sharing', icon: <Users size={14} /> },
                 { text: 'Password protection', icon: <Shield size={14} /> },
                 { text: '30 day link expiry', icon: <Clock size={14} /> },
@@ -50,17 +82,17 @@ const Payment = () => {
             limitations: [],
         },
         {
-            id: 'business',
-            name: 'Business',
+            id: 'pro',
+            name: 'Pro',
             icon: <Crown size={24} />,
-            description: 'For organizations at scale',
-            monthlyPrice: 24.99,
-            yearlyPrice: 249.99,
-            storage: '500 GB',
+            description: 'For power users and teams',
+            monthlyPrice: 299,
+            yearlyPrice: 3449,
+            storage: '512 GB',
             color: 'from-purple-500 to-purple-700',
             bgGlow: 'group-hover:shadow-purple-200 dark:group-hover:shadow-purple-900/30',
             features: [
-                { text: '500 GB Storage', icon: <HardDrive size={14} /> },
+                { text: '512 GB Storage', icon: <HardDrive size={14} /> },
                 { text: 'Unlimited everything', icon: <Infinity size={14} /> },
                 { text: 'Advanced security', icon: <Shield size={14} /> },
                 { text: 'No link expiry', icon: <Clock size={14} /> },
@@ -76,7 +108,7 @@ const Payment = () => {
     const getPrice = (plan) => {
         if (plan.id === 'free') return 'Free';
         const price = billingCycle === 'monthly' ? plan.monthlyPrice : plan.yearlyPrice;
-        return `$${price}`;
+        return `₹${price}`;
     };
 
     const getPeriod = (plan) => {
@@ -92,10 +124,106 @@ const Payment = () => {
         return `Save ${saved}%`;
     };
 
-    const handleSelectPlan = (plan) => {
-        if (plan.id === 'free') return;
+    const handleSelectPlan = async (plan) => {
+        if (plan.id === userPlan) return;
+        
+        if (plan.id === 'free') {
+            const confirmed = window.confirm('Are you sure you want to downgrade to the Free plan?');
+            if (confirmed) {
+                try {
+                    setIsLoading(true);
+                    await axios.post(`${import.meta.env.VITE_BASE_URL}/api/payments/create-subscription`, {
+                        planId: 'free',
+                        billingCycle: 'monthly',
+                    }, { withCredentials: true });
+                    toast.success('Successfully downgraded to Free plan');
+                    setUserPlan('free');
+                } catch (error) {
+                    toast.error('Failed to downgrade plan');
+                } finally {
+                    setIsLoading(false);
+                }
+            }
+            return;
+        }
+
         setSelectedPlan(plan);
         setShowCheckout(true);
+    };
+
+    const handlePayment = async () => {
+        setIsLoading(true);
+        const isLoaded = await loadRazorpay();
+        if (!isLoaded) {
+            toast.error('Failed to load Razorpay SDK. Are you online?');
+            setIsLoading(false);
+            return;
+        }
+
+        try {
+            // 1. Create subscription
+            const { data } = await axios.post(`${import.meta.env.VITE_BASE_URL}/api/payments/create-subscription`, {
+                planId: selectedPlan.id,
+                billingCycle,
+            }, { withCredentials: true });
+
+            if (data.status !== 'success') {
+                throw new Error(data.message || 'Failed to create subscription');
+            }
+
+            const { subscriptionId, key } = data;
+
+            // 2. Open Razorpay Checkout
+            const options = {
+                key: import.meta.env.VITE_RAZORPAY_KEY_ID || key,
+                subscription_id: subscriptionId,
+                name: 'CloudVault SaaS',
+                description: `${selectedPlan.name} Plan (${billingCycle})`,
+                image: 'https://static.vecteezy.com/system/resources/previews/002/318/271/non_2x/user-profile-icon-free-vector.jpg',
+                handler: async function (response) {
+                    try {
+                        // 3. Verify payment on backend
+                        const verifyRes = await axios.post(`${import.meta.env.VITE_BASE_URL}/api/payments/verify-payment`, {
+                            razorpay_payment_id: response.razorpay_payment_id,
+                            razorpay_subscription_id: response.razorpay_subscription_id,
+                            razorpay_signature: response.razorpay_signature,
+                            planId: selectedPlan.id,
+                            billingCycle,
+                        }, { withCredentials: true });
+
+                        if (verifyRes.data.status === 'success') {
+                            toast.success('Payment successful! Plan upgraded.');
+                            setUserPlan(selectedPlan.id);
+                            setShowCheckout(false);
+                        } else {
+                            toast.error('Payment verification failed.');
+                        }
+                    } catch (err) {
+                        toast.error('Payment verification error.');
+                    }
+                },
+                prefill: {
+                    name: 'User',
+                    email: 'user@example.com',
+                },
+                theme: {
+                    color: '#4F46E5', // brand-primary
+                },
+            };
+
+            const rzp = new window.Razorpay(options);
+            rzp.on('payment.failed', function (response) {
+                toast.error(`Payment failed: ${response.error.description}`);
+            });
+            rzp.open();
+            setShowCheckout(false); // Close our custom modal
+
+        } catch (error) {
+            console.error('Payment error:', error);
+            toast.error(error.response?.data?.message || 'Something went wrong during payment setup.');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -133,14 +261,16 @@ const Payment = () => {
                             }`}
                     >
                         Yearly
-                        <span className="bg-green-100 text-green-600 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">Save 17%</span>
+                        <span className="bg-green-100 text-green-600 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">Save Up To 15%</span>
                     </button>
                 </div>
             </div>
 
             {/* Plans Grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-                {plans.map((plan) => (
+                {plans.map((plan) => {
+                    const isCurrent = plan.id === userPlan;
+                    return (
                     <div
                         key={plan.id}
                         className={`group relative bg-white dark:bg-slate-800 rounded-2xl border-2 transition-all duration-300 hover:shadow-xl flex flex-col overflow-hidden ${plan.popular
@@ -220,15 +350,15 @@ const Payment = () => {
                         <div className="px-6 pb-6 pt-2">
                             <button
                                 onClick={() => handleSelectPlan(plan)}
-                                disabled={plan.isCurrent}
-                                className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer ${plan.isCurrent
+                                disabled={isCurrent || isLoading}
+                                className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer ${isCurrent
                                         ? 'bg-gray-100 dark:bg-slate-700 text-gray-400 dark:text-gray-500 cursor-default'
                                         : plan.popular
                                             ? 'bg-gradient-to-r from-brand-primary to-brand-secondary text-white shadow-lg shadow-brand-primary/25 hover:shadow-xl hover:shadow-brand-primary/30 hover:scale-[1.02]'
                                             : 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-100 hover:scale-[1.02]'
                                     }`}
                             >
-                                {plan.isCurrent ? 'Current Plan' : (
+                                {isCurrent ? 'Current Plan' : (
                                     <>
                                         Get {plan.name} <ArrowRight size={16} />
                                     </>
@@ -236,74 +366,7 @@ const Payment = () => {
                             </button>
                         </div>
                     </div>
-                ))}
-            </div>
-
-            {/* Feature Comparison */}
-            <div className="max-w-5xl mx-auto mt-12">
-                <h2 className="text-2xl font-bold text-black dark:text-white text-center mb-8">Compare Plans</h2>
-                <div className="bg-white dark:bg-slate-800 rounded-2xl border border-gray-200 dark:border-slate-700 overflow-hidden shadow-sm">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                            <thead>
-                                <tr className="border-b border-gray-100 dark:border-slate-700">
-                                    <th className="text-left px-6 py-4 font-bold text-gray-500 dark:text-gray-400 uppercase text-xs tracking-wider">Feature</th>
-                                    <th className="text-center px-6 py-4 font-bold text-gray-500 dark:text-gray-400 uppercase text-xs tracking-wider">Free</th>
-                                    <th className="text-center px-6 py-4 font-bold text-brand-primary uppercase text-xs tracking-wider bg-brand-primary/5">Pro</th>
-                                    <th className="text-center px-6 py-4 font-bold text-purple-500 uppercase text-xs tracking-wider">Business</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
-                                {[
-                                    { feature: 'Storage', free: '500 MB', pro: '50 GB', business: '500 GB' },
-                                    { feature: 'File sharing', free: 'Basic', pro: 'Unlimited', business: 'Unlimited' },
-                                    { feature: 'Share link expiry', free: '7 days', pro: '30 days', business: 'Never' },
-                                    { feature: 'Password protection', free: false, pro: true, business: true },
-                                    { feature: 'Download limits', free: false, pro: true, business: true },
-                                    { feature: 'Secure Vault', free: false, pro: false, business: true },
-                                    { feature: 'Team management', free: false, pro: false, business: true },
-                                    { feature: 'Custom branding', free: false, pro: false, business: true },
-                                    { feature: 'Priority support', free: false, pro: true, business: true },
-                                    { feature: 'API access', free: false, pro: false, business: true },
-                                ].map((row, i) => (
-                                    <tr key={i} className="hover:bg-gray-50 dark:hover:bg-slate-700/30 transition-colors">
-                                        <td className="px-6 py-3.5 font-medium text-gray-700 dark:text-gray-300">{row.feature}</td>
-                                        <td className="px-6 py-3.5 text-center">
-                                            {typeof row.free === 'boolean' ? (
-                                                row.free ? <Check size={16} className="text-green-500 mx-auto" /> : <X size={16} className="text-gray-300 dark:text-gray-600 mx-auto" />
-                                            ) : <span className="font-bold text-gray-700 dark:text-gray-300">{row.free}</span>}
-                                        </td>
-                                        <td className="px-6 py-3.5 text-center bg-brand-primary/5">
-                                            {typeof row.pro === 'boolean' ? (
-                                                row.pro ? <Check size={16} className="text-green-500 mx-auto" /> : <X size={16} className="text-gray-300 dark:text-gray-600 mx-auto" />
-                                            ) : <span className="font-bold text-brand-primary">{row.pro}</span>}
-                                        </td>
-                                        <td className="px-6 py-3.5 text-center">
-                                            {typeof row.business === 'boolean' ? (
-                                                row.business ? <Check size={16} className="text-green-500 mx-auto" /> : <X size={16} className="text-gray-300 dark:text-gray-600 mx-auto" />
-                                            ) : <span className="font-bold text-purple-500">{row.business}</span>}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            {/* FAQ Section */}
-            <div className="max-w-3xl mx-auto mt-12">
-                <h2 className="text-2xl font-bold text-black dark:text-white text-center mb-8">Frequently Asked Questions</h2>
-                <div className="space-y-3">
-                    {[
-                        { q: 'Can I upgrade or downgrade at any time?', a: 'Yes! You can switch between plans whenever you want. When upgrading, you\'ll be charged the prorated difference. When downgrading, the change takes effect at the end of your billing cycle.' },
-                        { q: 'What payment methods do you accept?', a: 'We accept all major credit cards (Visa, Mastercard, American Express), debit cards, UPI, and net banking through our secure payment gateway.' },
-                        { q: 'Is there a refund policy?', a: 'Yes, we offer a 7-day money-back guarantee. If you\'re not satisfied with your plan, contact us within 7 days of purchase for a full refund.' },
-                        { q: 'What happens to my files if I downgrade?', a: 'Your existing files will remain safe. However, you won\'t be able to upload new files until your usage is within your new plan\'s storage limit.' },
-                    ].map((faq, i) => (
-                        <FAQItem key={i} question={faq.q} answer={faq.a} />
-                    ))}
-                </div>
+                )})}
             </div>
 
             {/* Checkout Modal */}
@@ -330,45 +393,6 @@ const Payment = () => {
 
                         {/* Checkout Form */}
                         <div className="p-6 space-y-4">
-                            <div>
-                                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Cardholder Name</label>
-                                <input
-                                    type="text"
-                                    placeholder="John Doe"
-                                    className="w-full bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium dark:text-white outline-none focus:border-brand-primary transition-colors"
-                                />
-                            </div>
-                            <div>
-                                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Card Number</label>
-                                <input
-                                    type="text"
-                                    placeholder="4242 4242 4242 4242"
-                                    maxLength={19}
-                                    className="w-full bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium dark:text-white outline-none focus:border-brand-primary transition-colors tracking-wider"
-                                />
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Expiry</label>
-                                    <input
-                                        type="text"
-                                        placeholder="MM/YY"
-                                        maxLength={5}
-                                        className="w-full bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium dark:text-white outline-none focus:border-brand-primary transition-colors"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">CVV</label>
-                                    <input
-                                        type="password"
-                                        placeholder="•••"
-                                        maxLength={4}
-                                        className="w-full bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium dark:text-white outline-none focus:border-brand-primary transition-colors"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Order Summary */}
                             <div className="bg-gray-50 dark:bg-slate-800/50 rounded-xl p-4 border border-gray-100 dark:border-slate-700 space-y-2 mt-2">
                                 <div className="flex items-center justify-between text-sm">
                                     <span className="text-gray-500 font-medium">{selectedPlan.name} Plan ({billingCycle})</span>
@@ -376,7 +400,7 @@ const Payment = () => {
                                 </div>
                                 <div className="flex items-center justify-between text-sm">
                                     <span className="text-gray-500 font-medium">Tax</span>
-                                    <span className="font-bold text-black dark:text-white">$0.00</span>
+                                    <span className="font-bold text-black dark:text-white">₹0.00</span>
                                 </div>
                                 <div className="border-t border-gray-200 dark:border-slate-600 pt-2 flex items-center justify-between">
                                     <span className="font-bold text-black dark:text-white">Total</span>
@@ -385,46 +409,22 @@ const Payment = () => {
                             </div>
 
                             <button
-                                onClick={() => {
-                                    alert('Payment integration coming soon! This is a frontend demo.');
-                                    setShowCheckout(false);
-                                }}
-                                className="w-full py-3.5 bg-gradient-to-r from-brand-primary to-brand-secondary text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-[1.01] cursor-pointer flex items-center justify-center gap-2"
+                                onClick={handlePayment}
+                                disabled={isLoading}
+                                className="w-full py-3.5 bg-gradient-to-r from-brand-primary to-brand-secondary text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-[1.01] cursor-pointer flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                             >
-                                <Shield size={16} /> Pay {getPrice(selectedPlan)}
+                                {isLoading ? 'Processing...' : (
+                                    <><Shield size={16} /> Pay {getPrice(selectedPlan)}</>
+                                )}
                             </button>
 
                             <p className="text-center text-xs text-gray-400 font-medium flex items-center justify-center gap-1">
-                                <Shield size={12} /> Secured with 256-bit SSL encryption
+                                <Shield size={12} /> Secured by Razorpay
                             </p>
                         </div>
                     </div>
                 </div>
             )}
-        </div>
-    );
-};
-
-// FAQ Accordion Item
-const FAQItem = ({ question, answer }) => {
-    const [isOpen, setIsOpen] = useState(false);
-
-    return (
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden transition-all">
-            <button
-                onClick={() => setIsOpen(!isOpen)}
-                className="w-full px-6 py-4 flex items-center justify-between text-left cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
-            >
-                <span className="font-bold text-black dark:text-white text-sm pr-4">{question}</span>
-                <div className={`w-6 h-6 bg-gray-100 dark:bg-slate-700 rounded-full flex items-center justify-center shrink-0 transition-transform ${isOpen ? 'rotate-45' : ''}`}>
-                    <span className="text-gray-500 text-lg leading-none font-light">+</span>
-                </div>
-            </button>
-            <div className={`overflow-hidden transition-all duration-300 ${isOpen ? 'max-h-48 opacity-100' : 'max-h-0 opacity-0'}`}>
-                <p className="px-6 pb-4 text-sm text-gray-500 dark:text-gray-400 font-medium leading-relaxed">
-                    {answer}
-                </p>
-            </div>
         </div>
     );
 };

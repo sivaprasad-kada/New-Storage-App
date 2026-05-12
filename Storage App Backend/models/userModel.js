@@ -35,7 +35,7 @@ const userSchema = new Schema({
   },
   maxStorageInBytes: {
     type: Number,
-    default: 500 * 1024 * 1024, // 500MB default
+    default: 1 * 1024 * 1024 * 1024, // 1GB default
   },
   usedStorageInBytes: {
     type: Number,
@@ -46,6 +46,33 @@ const userSchema = new Schema({
   audioBytes: { type: Number, default: 0 },
   documentBytes: { type: Number, default: 0 },
   otherBytes: { type: Number, default: 0 },
+  plan: {
+    type: String,
+    enum: ["free", "basic", "pro"],
+    default: "free",
+  },
+  billingCycle: {
+    type: String,
+    enum: ["monthly", "yearly"],
+    default: "monthly",
+  },
+  subscriptionStatus: {
+    type: String,
+    enum: ["active", "cancelled", "past_due", "unpaid", "expired"],
+    default: "active",
+  },
+  razorpayCustomerId: {
+    type: String,
+  },
+  razorpaySubscriptionId: {
+    type: String,
+  },
+  currentPeriodEnd: {
+    type: Date,
+  },
+  subscriptionStartDate: {
+    type: Date,
+  },
 }, {
   strict: true,
   versionKey: false,

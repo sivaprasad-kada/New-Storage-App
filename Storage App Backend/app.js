@@ -11,6 +11,7 @@ import authRoutes from "./routes/authRoutes.js"
 import fileshareRoute from "./routes/fileshareRoute.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import { startCronJobs } from "./utils/cron.js";
+import paymentRoutes from "./routes/paymentRoutes.js";
 import "./config/mongoose.js";
 try {
   const secretkey = "sivaprasadkada";
@@ -35,6 +36,7 @@ try {
   app.use("/auth", authRoutes);
   app.use("/", fileshareRoute);
   app.use("/api/notifications", checkAuth, notificationRoutes);
+  app.use("/api/payments", paymentRoutes);
   app.use((err, req, res, next) => {
     console.log(err);
     res.status(err.status || 500).json({ error: "Something went wrong!" });
