@@ -39,6 +39,17 @@ body {
   color: #f1f5f9;
 }
 
+/* Ensure all buttons have pointer cursors */
+button, 
+[role="button"] {
+  cursor: pointer !important;
+}
+
+button:disabled,
+button[disabled] {
+  cursor: not-allowed !important;
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

@@ -1,8 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Download, LayoutGrid, List, ArrowRight, Info, File, Image, Video, FileText, Folder, FileArchive, Code } from 'lucide-react';
+import { Download, LayoutGrid, List, ArrowRight, Info, File, Image, Video, FileText, Folder, FileArchive, Code, CheckSquare } from 'lucide-react';
 
-const RecentActivity = ({ files = [], onNavigate, onFileClick, onDownload, onDelete, onDetailsClick, onShare }) => {
-    // Persist view preference
+const RecentActivity = ({
+    files = [],
+    onNavigate,
+    onFileClick,
+    onDownload,
+    onDelete,
+    onDetailsClick,
+    onShare,
+    selectedFileIds = [],
+    onToggleSelect,
+}) => {
     const [viewMode, setViewMode] = useState(() => {
         return localStorage.getItem('recentActivityView') || 'grid';
     });
@@ -11,15 +20,17 @@ const RecentActivity = ({ files = [], onNavigate, onFileClick, onDownload, onDel
         localStorage.setItem('recentActivityView', viewMode);
     }, [viewMode]);
 
-    const getFileIcon = (tags) => {
-        if (tags.includes('folder')) return <Folder size={40} className="text-brand-primary" fill="currentColor" fillOpacity={0.2} />;
-        if (tags.includes('image')) return <Image size={40} className="text-purple-500" />;
-        if (tags.includes('video')) return <Video size={40} className="text-red-500" />;
-        if (tags.includes('document')) return <FileText size={40} className="text-blue-500" />;
-        if (tags.includes('archive')) return <FileArchive size={40} className="text-yellow-500" />;
-        if (tags.includes('code')) return <Code size={40} className="text-green-500" />;
-        return <File size={40} className="text-gray-400" />;
+    const getFileIcon = (tags, size = 40) => {
+        if (tags.includes('folder')) return <Folder size={size} className="text-brand-primary" fill="currentColor" fillOpacity={0.2} />;
+        if (tags.includes('image')) return <Image size={size} className="text-purple-500" />;
+        if (tags.includes('video')) return <Video size={size} className="text-red-500" />;
+        if (tags.includes('document')) return <FileText size={size} className="text-blue-500" />;
+        if (tags.includes('archive')) return <FileArchive size={size} className="text-yellow-500" />;
+        if (tags.includes('code')) return <Code size={size} className="text-green-500" />;
+        return <File size={size} className="text-gray-400" />;
     };
+
+    const isSelectionMode = selectedFileIds.length > 0;
 
     return (
         <div className="space-y-4">
@@ -57,98 +68,128 @@ const RecentActivity = ({ files = [], onNavigate, onFileClick, onDownload, onDel
                     </div>
                 ) : (
                     <div className={viewMode === 'grid'
-                        ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4"
-                        : "flex flex-col gap-3"
+                        ? "grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4"
+                        : "flex flex-col gap-2 sm:gap-3"
                     }>
-                        {files.map((file, i) => (
-                            <div
-                                key={i}
-                                onClick={() => {
-                                    if (file.isDirectory || (file.tags && file.tags.includes('folder'))) {
-                                        onNavigate && onNavigate(file._id || file.id);
-                                    } else {
-                                        onFileClick && onFileClick(file.filename || file.name, file._id || file.id, file);
-                                    }
-                                }}
-                                className={`
-                                bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-4 shadow-sm hover:shadow-md transition-all cursor-pointer
-                                ${viewMode === 'list'
-                                        ? 'flex items-center gap-4 min-h-[80px]'
-                                        : 'flex flex-col h-full min-h-[200px]'
-                                    }
-                            `}>
-                                {/* Icon */}
-                                <div className={`${viewMode === 'list' ? 'shrink-0' : 'mb-3'}`}>
-                                    <div className="flex items-center justify-center">
-                                        {React.cloneElement(getFileIcon(file.tags || []), {
-                                            size: viewMode === 'list' ? 32 : 40
-                                        })}
+                        {files.map((file, i) => {
+                            const fileId = file._id || file.id;
+                            const isFolder = file.isDirectory || (file.tags && file.tags.includes('folder'));
+                            const isSelected = !isFolder && selectedFileIds.includes(fileId);
+
+                            return (
+                                <div
+                                    key={i}
+                                    onClick={() => {
+                                        // If selection mode is active, toggle file (not folders)
+                                        if (isSelectionMode && !isFolder && onToggleSelect) {
+                                            onToggleSelect(fileId);
+                                            return;
+                                        }
+                                        if (isFolder) {
+                                            onNavigate && onNavigate(fileId);
+                                        } else {
+                                            onFileClick && onFileClick(file.filename || file.name, fileId, file);
+                                        }
+                                    }}
+                                    className={`
+                                        bg-white dark:bg-slate-800 rounded-xl border shadow-sm hover:shadow-md transition-all cursor-pointer relative
+                                        ${isSelected
+                                            ? 'border-brand-primary ring-2 ring-brand-primary/30'
+                                            : 'border-gray-200 dark:border-slate-700'
+                                        }
+                                        ${viewMode === 'list'
+                                            ? 'flex items-center gap-4 min-h-[80px] p-4'
+                                            : 'flex flex-col h-full min-h-[200px] p-4'
+                                        }
+                                    `}
+                                >
+                                    {/* Checkbox for files (not folders) */}
+                                    {!isFolder && onToggleSelect && (
+                                        <div
+                                            className={`absolute top-2 left-2 z-10 transition-opacity duration-150
+                                                ${isSelectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}
+                                            `}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onToggleSelect(fileId);
+                                            }}
+                                        >
+                                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors
+                                                ${isSelected
+                                                    ? 'bg-brand-primary border-brand-primary'
+                                                    : 'bg-white dark:bg-slate-700 border-gray-300 dark:border-slate-500 hover:border-brand-primary'
+                                                }`}
+                                            >
+                                                {isSelected && (
+                                                    <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                                                        <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                                    </svg>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Icon */}
+                                    <div className={`${viewMode === 'list' ? 'shrink-0' : 'mb-3'}`}>
+                                        <div className="flex items-center justify-center">
+                                            {getFileIcon(file.tags || [], viewMode === 'list' ? 32 : 40)}
+                                        </div>
+                                    </div>
+
+                                    {/* Content Details */}
+                                    <div className={`flex-1 ${viewMode === 'list' ? 'flex items-center justify-between gap-4 overflow-hidden' : ''}`}>
+                                        {/* Name & Tags */}
+                                        <div className={`${viewMode === 'list' ? 'min-w-0 flex-1' : 'mb-3 opacity-100'}`}>
+                                            <h4 className="font-bold text-black dark:text-white mb-1 truncate" title={file.name}>{file.name}</h4>
+                                            <div className="flex flex-wrap gap-1">
+                                                {file.tags && file.tags.map((tag, t) => (
+                                                    <span key={t} className="bg-brand-primary/10 text-brand-primary text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">{tag}</span>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Meta & Actions */}
+                                        <div className={`${viewMode === 'list' ? 'flex items-center gap-6 shrink-0' : 'mt-auto space-y-1'}`}>
+                                            {/* Meta Stats */}
+                                            <div className={`${viewMode === 'list' ? 'flex items-center gap-6' : 'space-y-1'}`}>
+                                                <div className={`text-xs font-bold text-black dark:text-gray-300 ${viewMode === 'grid' ? 'flex justify-between border-b border-gray-200 dark:border-slate-700 pb-1' : ''}`}>
+                                                    <span className={viewMode === 'list' ? 'text-gray-500 dark:text-gray-400 mr-1 hidden sm:inline' : ''}>{viewMode === 'list' ? '' : 'size'}</span>
+                                                    <span className="font-normal">{file.size}</span>
+                                                </div>
+                                                <div className={`text-xs font-bold text-black dark:text-gray-300 ${viewMode === 'grid' ? 'flex justify-between border-b border-gray-200 dark:border-slate-700 pb-1' : ''}`}>
+                                                    <span className={viewMode === 'list' ? 'text-gray-500 dark:text-gray-400 mr-1 hidden sm:inline' : ''}>{viewMode === 'list' ? '' : 'modified'}</span>
+                                                    <span className="font-normal">{file.modified}</span>
+                                                </div>
+                                            </div>
+
+                                            {/* Actions */}
+                                            <div className={`${viewMode === 'list' ? 'flex gap-4' : 'flex justify-between items-center pt-2'}`}>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); onDetailsClick && onDetailsClick(file); }}
+                                                    className="flex items-center gap-1 text-xs font-bold text-black dark:text-white hover:underline cursor-pointer"
+                                                >
+                                                    <Info size={12} className="text-gray-500 dark:text-gray-400" />
+                                                    <span className="hidden sm:inline">Details</span>
+                                                </button>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); onShare && onShare(file); }}
+                                                    className="flex items-center gap-1 text-xs font-bold text-black dark:text-white hover:underline cursor-pointer"
+                                                >
+                                                    <span className="hidden sm:inline">Share</span>
+                                                </button>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); onDownload && onDownload(file); }}
+                                                    className="flex items-center gap-1 text-xs font-bold text-brand-primary hover:underline cursor-pointer"
+                                                >
+                                                    <Download size={12} />
+                                                    <span className="hidden sm:inline">Download</span>
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-
-                                {/* Content Details */}
-                                <div className={`flex-1 ${viewMode === 'list' ? 'flex items-center justify-between gap-4 overflow-hidden' : ''}`}>
-
-                                    {/* Name & Tags */}
-                                    <div className={`${viewMode === 'list' ? 'min-w-0 flex-1' : 'mb-3 opacity-100'}`}>
-                                        <h4 className="font-bold text-black dark:text-white mb-1 truncate" title={file.name}>{file.name}</h4>
-                                        <div className="flex flex-wrap gap-1">
-                                            {file.tags && file.tags.map((tag, t) => (
-                                                <span key={t} className="bg-brand-primary/10 text-brand-primary text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">{tag}</span>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    {/* Meta & Actions */}
-                                    <div className={`${viewMode === 'list' ? 'flex items-center gap-6 shrink-0' : 'mt-auto space-y-1'}`}>
-
-                                        {/* Meta Stats */}
-                                        <div className={`${viewMode === 'list' ? 'flex items-center gap-6' : 'space-y-1'}`}>
-                                            <div className={`text-xs font-bold text-black dark:text-gray-300 ${viewMode === 'grid' ? 'flex justify-between border-b border-gray-200 dark:border-slate-700 pb-1' : ''}`}>
-                                                <span className={viewMode === 'list' ? 'text-gray-500 dark:text-gray-400 mr-1 hidden sm:inline' : ''}>{viewMode === 'list' ? '' : 'size'}</span>
-                                                <span className="font-normal">{file.size}</span>
-                                            </div>
-                                            <div className={`text-xs font-bold text-black dark:text-gray-300 ${viewMode === 'grid' ? 'flex justify-between border-b border-gray-200 dark:border-slate-700 pb-1' : ''}`}>
-                                                <span className={viewMode === 'list' ? 'text-gray-500 dark:text-gray-400 mr-1 hidden sm:inline' : ''}>{viewMode === 'list' ? '' : 'modified'}</span>
-                                                <span className="font-normal">{file.modified}</span>
-                                            </div>
-                                        </div>
-
-                                        {/* Actions */}
-                                        <div className={`${viewMode === 'list' ? 'flex gap-4' : 'flex justify-between items-center pt-2'}`}>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    onDetailsClick && onDetailsClick(file);
-                                                }}
-                                                className="flex items-center gap-1 text-xs font-bold text-black dark:text-white hover:underline cursor-pointer"
-                                            >
-                                                <Info size={12} className="text-gray-500 dark:text-gray-400" /> <span className="hidden sm:inline">Details</span>
-                                            </button>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    onShare && onShare(file);
-                                                }}
-                                                className="flex items-center gap-1 text-xs font-bold text-black dark:text-white hover:underline cursor-pointer"
-                                            >
-                                                <span className="hidden sm:inline">Share</span>
-                                            </button>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    onDownload && onDownload(file);
-                                                }}
-                                                className="flex items-center gap-1 text-xs font-bold text-brand-primary hover:underline cursor-pointer"
-                                            >
-                                                <Download size={12} /> <span className="hidden sm:inline">Download</span>
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
 

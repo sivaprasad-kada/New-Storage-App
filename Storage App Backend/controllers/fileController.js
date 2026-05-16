@@ -1,4 +1,5 @@
 import path from "path";
+import mongoose from "mongoose";
 import Directory from "../models/directoryModel.js";
 import File from "../models/fileModel.js";
 import User from "../models/userModel.js";
@@ -178,6 +179,97 @@ export const deleteFile = async (req, res, next) => {
   }
 };
 
+/**
+ * BULK DELETE FILES
+ * DELETE /api/files/bulk-delete
+ * Body: { fileIds: ["id1", "id2", ...] }
+ */
+export const bulkDeleteFiles = async (req, res, next) => {
+  const { fileIds } = req.body;
+
+  // --- Validation ---
+  if (!Array.isArray(fileIds) || fileIds.length === 0) {
+    return res.status(400).json({ success: false, error: "fileIds must be a non-empty array" });
+  }
+
+  // Validate each ID is a valid ObjectId
+  const invalidIds = fileIds.filter(id => !mongoose.Types.ObjectId.isValid(id));
+  if (invalidIds.length > 0) {
+    return res.status(400).json({ success: false, error: `Invalid file IDs: ${invalidIds.join(", ")}` });
+  }
+
+  try {
+    // Fetch only files (not folders) that belong to the authenticated user
+    const files = await File.find({
+      _id: { $in: fileIds },
+      userId: req.user._id,
+    }).lean();
+
+    if (files.length === 0) {
+      return res.status(404).json({ success: false, error: "No matching files found" });
+    }
+
+    // Delete all MongoDB documents first (fast)
+    const fileMongoIds = files.map(f => f._id);
+    await File.deleteMany({ _id: { $in: fileMongoIds } });
+
+    // Respond immediately to client
+    res.status(200).json({ success: true, deletedCount: files.length });
+
+    // Async background cleanup (fire & forget)
+    (async () => {
+      try {
+        // Group S3 deletions & storage updates in parallel
+        const deletionResults = await Promise.allSettled(
+          files.map(file => deleteS3File(`${file._id}${file.extension}`))
+        );
+
+        deletionResults.forEach((result, i) => {
+          if (result.status === "rejected") {
+            console.error(`Failed to delete S3 file ${files[i]._id}:`, result.reason);
+          }
+        });
+
+        // Aggregate size changes per user category
+        const storageDelta = {};
+        const dirDeltaMap = {}; // parentDirId -> deltaSize
+        const affectedParentDirs = new Set();
+
+        for (const file of files) {
+          const cat = file.category || "other";
+          storageDelta[`${cat}Bytes`] = (storageDelta[`${cat}Bytes`] || 0) - file.size;
+          storageDelta.usedStorageInBytes = (storageDelta.usedStorageInBytes || 0) - file.size;
+
+          const dirKey = String(file.parentDirId);
+          dirDeltaMap[dirKey] = (dirDeltaMap[dirKey] || 0) - file.size;
+          affectedParentDirs.add(String(file.parentDirId));
+        }
+
+        // Update user storage in one atomic call
+        await User.findByIdAndUpdate(req.user._id, { $inc: storageDelta });
+
+        // Update directory sizes & invalidate Redis caches
+        await Promise.all(
+          [...affectedParentDirs].map(async (dirId) => {
+            await updateDirectoriesSize(dirId, dirDeltaMap[dirId]);
+            await redisClient.del(`directory:${dirId}`);
+          })
+        );
+
+        // Invalidate file URL caches
+        await Promise.all(
+          files.map(file => redisClient.del(`file:url:${file._id}`))
+        );
+      } catch (cleanupErr) {
+        console.error("Bulk delete background cleanup error:", cleanupErr);
+      }
+    })();
+
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const uploadInitiate = async (req, res) => {
   const parentDirId = req.body.parentDirId || req.user.rootDirId;
   try {
@@ -195,11 +287,31 @@ export const uploadInitiate = async (req, res) => {
     const filesize = parseInt(req.body.size, 10) || 0;
     const contentType = req.body.contentType || "application/octet-stream";
 
+    // --- Duplicate filename check (case-insensitive, trimmed) ---
+    const normalizedName = filename.trim().toLowerCase();
+    const duplicate = await File.findOne({
+      userId: req.user._id,
+      parentDirId: parentDirData._id,
+      searchName: normalizedName,
+      isUploading: false, // ignore in-progress uploads
+    }).lean();
+
+    if (duplicate) {
+      return res.status(409).json({
+        success: false,
+        message: `File "${filename}" already exists in this folder`,
+      });
+    }
+
     const user = await User.findById(req.user._id);
 
     // Check Storage Limit
+    if (user.uploadsBlocked) {
+      return res.status(403).json({ error: "Storage limit exceeded. Please delete files or upgrade your plan." });
+    }
+    
     if (user.usedStorageInBytes + filesize > user.maxStorageInBytes) {
-      return res.status(403).json({ error: "Storage limit exceeded. Please buy more storage." });
+      return res.status(403).json({ error: "Storage limit exceeded. Please delete files or upgrade your plan." });
     }
 
     const extension = path.extname(filename);

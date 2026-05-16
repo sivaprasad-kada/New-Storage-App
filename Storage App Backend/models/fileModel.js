@@ -6,6 +6,9 @@ const fileSchema = new Schema(
       type: String,
       required: true,
     },
+    searchName: {
+      type: String,
+    },
     extension: {
       type: String,
       required: true,
@@ -38,6 +41,16 @@ const fileSchema = new Schema(
     strict: "throw",
   }
 );
+
+fileSchema.pre("save", function (next) {
+  if (this.isModified("name") || this.isNew) {
+    this.searchName = this.name.toLowerCase();
+  }
+  next();
+});
+
+fileSchema.index({ userId: 1, parentDirId: 1, searchName: 1 });
+fileSchema.index({ userId: 1, searchName: 1 });
 
 const File = model("File", fileSchema);
 export default File;

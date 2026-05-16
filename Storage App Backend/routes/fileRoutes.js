@@ -6,6 +6,7 @@ import {
   renameFile,
   uploadComplete,
   uploadInitiate,
+  bulkDeleteFiles,
 } from "../controllers/fileController.js";
 
 const router = express.Router();
@@ -16,6 +17,9 @@ router.param("id", validateIdMiddleware);
 // Upload flow
 router.post("/upload/initiate", uploadInitiate);
 router.post("/upload/complete", uploadComplete);
+
+// Bulk operations (must come BEFORE /:id to avoid route conflicts)
+router.delete("/bulk-delete", bulkDeleteFiles);
 
 router.get("/:id", getFile);
 

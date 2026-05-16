@@ -1,21 +1,45 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Search, Bell, User, Menu, ChevronDown, Check, LogOut, Settings } from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { Search, Bell, User, Menu, ChevronDown, Check, LogOut, Settings, File, Folder, Image as ImageIcon } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+import AlertModal from './AlertModal';
+import { PLAN_FEATURES } from '../utils/planFeatures';
+
+const useDebounce = (value, delay) => {
+    const [debouncedValue, setDebouncedValue] = useState(value);
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            setDebouncedValue(value);
+        }, delay);
+        return () => clearTimeout(handler);
+    }, [value, delay]);
+    return debouncedValue;
+};
 
 const Header = () => {
     const { toggleSidebar } = useTheme();
     const navigate = useNavigate();
+    const location = useLocation();
+
     const [searchFocus, setSearchFocus] = useState(false);
-    const [searchMode, setSearchMode] = useState('Normal Search');
+    const [searchMode, setSearchMode] = useState('Folder Search');
+    const [query, setQuery] = useState('');
+    const [folderFiles, setFolderFiles] = useState([]);
+    const [globalFiles, setGlobalFiles] = useState([]);
+    const [isSearching, setIsSearching] = useState(false);
+    const [showPremiumModal, setShowPremiumModal] = useState(false);
+
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
     const [isNotificationOpen, setIsNotificationOpen] = useState(false);
     const [user, setUser] = useState(null);
     const [notifications, setNotifications] = useState([]);
+    const [isLoggingOut, setIsLoggingOut] = useState(false);
+
     const dropdownRef = useRef(null);
     const userMenuRef = useRef(null);
     const notificationRef = useRef(null);
+    const searchContainerRef = useRef(null);
 
     useEffect(() => {
         // Fetch User Data
@@ -47,6 +71,70 @@ const Header = () => {
         fetchNotifications();
     }, []);
 
+    // Determine current folder ID
+    const currentFolderId = useMemo(() => {
+        const dirMatch = location.pathname.match(/\/directory\/([a-f0-9]{24})/);
+        return dirMatch ? dirMatch[1] : user?.rootDirId;
+    }, [location.pathname, user?.rootDirId]);
+
+    // Fetch folder files once when folder opens
+    useEffect(() => {
+        if (searchMode === 'Folder Search' && currentFolderId) {
+            const fetchFolderFiles = async () => {
+                try {
+                    const res = await fetch(`${import.meta.env.VITE_BASE_URL}/api/files/folder/${currentFolderId}`, { credentials: 'include' });
+                    if (res.ok) {
+                        const data = await res.json();
+                        setFolderFiles(data.files || []);
+                    }
+                } catch(e) {
+                    console.error("Folder fetch error", e);
+                }
+            };
+            fetchFolderFiles();
+        }
+    }, [currentFolderId, searchMode]);
+
+    const debouncedQuery = useDebounce(query, 500);
+
+    // Global search effect
+    useEffect(() => {
+        if (searchMode === 'Global Search' && debouncedQuery.trim().length > 0) {
+            const fetchSearch = async () => {
+                try {
+                    const res = await fetch(`${import.meta.env.VITE_BASE_URL}/api/search/global?q=${encodeURIComponent(debouncedQuery.trim())}`, { credentials: 'include' });
+                    if (res.ok) {
+                        const data = await res.json();
+                        setGlobalFiles(data.files || []);
+                    } else if (res.status === 403) {
+                        setShowPremiumModal(true);
+                        setSearchMode('Folder Search'); // fallback
+                    }
+                } catch(e) {
+                    console.error(e);
+                } finally {
+                    setIsSearching(false);
+                }
+            };
+            fetchSearch();
+        } else if (searchMode === 'Global Search' && debouncedQuery.trim().length === 0) {
+            setGlobalFiles([]);
+            setIsSearching(false);
+        }
+    }, [debouncedQuery, searchMode]);
+
+    // Handle typing state
+    useEffect(() => {
+        if (searchMode === 'Global Search' && query !== debouncedQuery && query.trim().length > 0) {
+            setIsSearching(true);
+        }
+    }, [query, debouncedQuery, searchMode]);
+
+    const filteredFolderFiles = useMemo(() => {
+        if (!query) return [];
+        return folderFiles.filter(f => f.name.toLowerCase().includes(query.toLowerCase()));
+    }, [folderFiles, query]);
+
     // Close dropdowns on click outside
     useEffect(() => {
         function handleClickOutside(event) {
@@ -59,27 +147,47 @@ const Header = () => {
             if (notificationRef.current && !notificationRef.current.contains(event.target)) {
                 setIsNotificationOpen(false);
             }
+            if (searchContainerRef.current && !searchContainerRef.current.contains(event.target)) {
+                setSearchFocus(false);
+            }
         }
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
     const handleSearchModeSelect = (mode) => {
+        const hasGlobalSearch = PLAN_FEATURES[user?.plan?.toLowerCase() || 'free']?.globalSearch;
+        
+        if (mode === 'Global Search' && !hasGlobalSearch) {
+            setShowPremiumModal(true);
+            setIsDropdownOpen(false);
+            return;
+        }
         setSearchMode(mode);
         setIsDropdownOpen(false);
+        setQuery('');
     };
 
     const handleLogout = async () => {
+        if (isLoggingOut) return;
+        setIsLoggingOut(true);
+
+        // Close all menus immediately
+        setIsUserMenuOpen(false);
+        setIsNotificationOpen(false);
+        setIsDropdownOpen(false);
+
         try {
-            const res = await fetch(`${import.meta.env.VITE_BASE_URL}/user/logout`, {
+            await fetch(`${import.meta.env.VITE_BASE_URL}/user/logout`, {
                 method: 'POST',
-                credentials: 'include'
+                credentials: 'include',
             });
-            if (res.ok || res.status === 204) {
-                navigate('/auth');
-            }
         } catch (error) {
-            console.error("Logout failed", error);
+            console.error('Logout request failed:', error);
+        } finally {
+            // Always navigate to auth regardless of server response
+            setIsLoggingOut(false);
+            navigate('/auth', { replace: true });
         }
     };
 
@@ -101,16 +209,32 @@ const Header = () => {
 
     const unreadCount = notifications.filter(n => !n.isRead).length;
 
-    return (
-        <header className="h-20 px-4 sm:px-8 flex items-center justify-between shrink-0 bg-gray-50 dark:bg-slate-900 border-b border-transparent transition-colors duration-300">
+    const showResults = searchFocus && query.length > 0;
+    const searchResults = searchMode === 'Folder Search' ? filteredFolderFiles : globalFiles;
 
-            {/* Mobile Menu & Brand */}
-            <div className="flex items-center gap-4">
-                <button onClick={toggleSidebar} className="lg:hidden p-2 text-gray-600 dark:text-gray-300">
-                    <Menu size={24} />
+    const HighlightMatch = ({ text }) => {
+        if (!query) return <span>{text}</span>;
+        const parts = text.split(new RegExp(`(${query})`, 'gi'));
+        return (
+            <span>
+                {parts.map((part, i) => 
+                    part.toLowerCase() === query.toLowerCase() 
+                    ? <span key={i} className="bg-brand-primary/20 text-brand-primary rounded px-0.5">{part}</span> 
+                    : part
+                )}
+            </span>
+        );
+    };
+
+    return (
+        <header className="h-16 sm:h-20 px-3 sm:px-6 flex items-center justify-between shrink-0 bg-gray-50 dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 transition-colors duration-300 gap-2">
+            {/* Mobile Menu & Brand - ALWAYS visible */}
+            <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+                <button onClick={toggleSidebar} className="lg:hidden p-2 text-gray-600 dark:text-gray-300 shrink-0 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-colors">
+                    <Menu size={22} />
                 </button>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                     <div className="text-brand-primary">
                         {/* Refined Geometric Logo Object */}
                         <svg width="36" height="36" viewBox="0 0 24 24" fill="currentColor" className="drop-shadow-sm">
@@ -121,25 +245,26 @@ const Header = () => {
                             <circle cx="12" cy="12" r="3" fill="var(--color-brand-primary)" />
                         </svg>
                     </div>
-                    <span className="hidden sm:block text-2xl sm:text-3xl font-extrabold text-brand-primary tracking-tight font-mono">Cloud Drive</span>
+                    <span className="hidden sm:block text-2xl sm:text-3xl font-extrabold text-brand-primary tracking-tight font-mono whitespace-nowrap">Cloud Drive</span>
                 </div>
             </div>
 
-            {/* Search Bar - Responsive */}
-            <div className="flex-1 max-w-2xl mx-4 sm:mx-12 relative z-20" ref={dropdownRef}>
-                <div className={`relative transition-all duration-200 ${searchFocus ? 'scale-105' : ''}`}>
-                    <div className="flex items-center w-full bg-white dark:bg-slate-800 rounded-full border border-brand-primary px-4 py-2 shadow-sm transition-colors">
-                        <Search className="text-gray-400 ml-2 shrink-0" size={20} />
+            {/* Search Bar - hidden on mobile, visible from sm */}
+            <div className={`hidden sm:flex flex-1 max-w-2xl transition-all duration-300 relative z-20 ${searchFocus ? 'mx-0' : 'mx-4 lg:mx-12'}`} ref={searchContainerRef}>
+                <div className={`relative transition-all duration-200 ${searchFocus ? 'scale-100 sm:scale-105' : 'scale-100'}`}>
+                    <div className="flex items-center w-full bg-white dark:bg-slate-800 rounded-full border border-brand-primary px-2 sm:px-4 py-2 shadow-sm transition-colors">
+                        <Search className="text-gray-400 ml-1 sm:ml-2 shrink-0" size={18} />
                         <input
                             type="text"
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
                             placeholder={`Search by ${searchMode}...`}
                             onFocus={() => setSearchFocus(true)}
-                            onBlur={() => setSearchFocus(false)}
                             className="w-full bg-transparent border-none focus:outline-none px-4 text-gray-600 dark:text-gray-200 placeholder:text-gray-400 text-sm sm:text-base min-w-0"
                         />
 
                         {/* Dropdown Trigger */}
-                        <div className="border-l border-gray-300 dark:border-slate-600 pl-2 sm:pl-3 relative shrink-0">
+                        <div className="border-l border-gray-300 dark:border-slate-600 pl-2 sm:pl-3 relative shrink-0" ref={dropdownRef}>
                             <button
                                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                                 className="flex items-center gap-1 sm:gap-2 text-gray-500 hover:text-brand-primary transition-colors text-xs sm:text-sm font-medium whitespace-nowrap"
@@ -147,33 +272,86 @@ const Header = () => {
                                 <span className="hidden sm:inline">{searchMode}</span>
                                 <ChevronDown size={14} className={`transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
                             </button>
+
+                            {/* Search Dropdown */}
+                            {isDropdownOpen && (
+                                <div className="absolute top-full right-0 mt-4 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-gray-100 dark:border-slate-700 py-2 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                                    <button
+                                        onClick={() => handleSearchModeSelect('Folder Search')}
+                                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-slate-700 flex items-center justify-between text-gray-700 dark:text-gray-200"
+                                    >
+                                        Folder Search
+                                        {searchMode === 'Folder Search' && <Check size={14} className="text-brand-primary" />}
+                                    </button>
+                                    <button
+                                        onClick={() => handleSearchModeSelect('Global Search')}
+                                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-slate-700 flex items-center justify-between text-gray-700 dark:text-gray-200"
+                                    >
+                                        Global Search
+                                        {searchMode === 'Global Search' && <Check size={14} className="text-brand-primary" />}
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     </div>
 
-                    {/* Search Dropdown */}
-                    {isDropdownOpen && (
-                        <div className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-gray-100 dark:border-slate-700 py-2 overflow-hidden animate-in fade-in slide-in-from-top-2">
-                            <button
-                                onClick={() => handleSearchModeSelect('Normal Search')}
-                                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-slate-700 flex items-center justify-between text-gray-700 dark:text-gray-200"
-                            >
-                                Normal Search
-                                {searchMode === 'Normal Search' && <Check size={14} className="text-brand-primary" />}
-                            </button>
-                            <button
-                                onClick={() => handleSearchModeSelect('Semantic Search')}
-                                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-slate-700 flex items-center justify-between text-gray-700 dark:text-gray-200"
-                            >
-                                Semantic Search
-                                {searchMode === 'Semantic Search' && <Check size={14} className="text-brand-primary" />}
-                            </button>
+                    {/* Search Results Dropdown */}
+                    {showResults && (
+                        <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-gray-100 dark:border-slate-700 max-h-96 overflow-y-auto z-50 animate-in fade-in slide-in-from-top-2">
+                            <div className="p-3 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center sticky top-0 bg-white/95 dark:bg-slate-800/95 backdrop-blur-sm">
+                                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                                    {searchMode === 'Folder Search' ? 'Current Folder' : 'All Files'}
+                                </span>
+                                {isSearching && <span className="text-xs text-brand-primary animate-pulse">Searching...</span>}
+                            </div>
+                            
+                            {searchResults.length === 0 && !isSearching ? (
+                                <div className="p-8 text-center text-gray-500 flex flex-col items-center">
+                                    <Search className="mb-2 text-gray-300" size={32} />
+                                    <p className="font-medium text-sm">No results found for "{query}"</p>
+                                </div>
+                            ) : (
+                                <div className="p-2 space-y-1">
+                                    {searchResults.map(file => (
+                                        <div 
+                                            key={file._id}
+                                            onMouseDown={() => {
+                                                if (file.type === 'folder' || file.isDirectory) {
+                                                    navigate(`/directory/${file._id}`);
+                                                } else {
+                                                    window.open(`${import.meta.env.VITE_BASE_URL}/file/${file._id}`, '_blank');
+                                                }
+                                                setSearchFocus(false);
+                                            }}
+                                            className="flex items-center gap-3 p-3 hover:bg-gray-50 dark:hover:bg-slate-700/50 rounded-lg cursor-pointer transition-colors group w-full"
+                                        >
+                                            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-brand-primary/10 text-brand-primary flex items-center justify-center shrink-0">
+                                                {(file.type === 'folder' || file.isDirectory) ? <Folder size={18} /> : (file.type === 'image' ? <ImageIcon size={18} /> : <File size={18} />)}
+                                            </div>
+                                            <div className="flex-1 min-w-0 pr-2">
+                                                <p className="font-medium text-gray-900 dark:text-gray-100 truncate text-xs sm:text-sm">
+                                                    <HighlightMatch text={file.name} />
+                                                </p>
+                                                {searchMode === 'Global Search' && (
+                                                    <p className="text-[10px] sm:text-xs text-gray-500 truncate mt-0.5 flex items-center gap-1">
+                                                        <Folder size={10} className="shrink-0" /> <span className="truncate">{file.folderId === user?.rootDirId ? 'My Cloud' : 'Nested Folder'}</span>
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <div className="text-[10px] sm:text-xs text-gray-400 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap shrink-0">
+                                                {file.type === 'folder' ? 'Folder' : `${(file.size / 1024).toFixed(1)} KB`}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
             </div>
 
             {/* Actions & User Menu */}
-            <div className="flex items-center gap-3 sm:gap-6 shrink-0 relative">
+            <div className="flex items-center gap-1.5 sm:gap-4 shrink-0 relative">
                 <div className="relative" ref={notificationRef}>
                     <div 
                         onClick={() => setIsNotificationOpen(!isNotificationOpen)}
@@ -262,14 +440,50 @@ const Header = () => {
                                 <Settings size={18} className="text-gray-400" />
                                 Settings
                             </button>
-                            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-xl transition-colors text-left">
-                                <LogOut size={18} />
-                                Logout
+                            <button
+                                onClick={handleLogout}
+                                disabled={isLoggingOut}
+                                className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-xl transition-colors text-left disabled:opacity-60 disabled:cursor-not-allowed"
+                            >
+                                <LogOut size={18} className={isLoggingOut ? 'animate-spin' : ''} />
+                                {isLoggingOut ? 'Logging out...' : 'Logout'}
                             </button>
                         </div>
                     </div>
                 )}
             </div>
+
+            {/* Premium Upgrade Modal */}
+            {showPremiumModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl shadow-2xl w-full max-w-md border border-gray-200 dark:border-slate-800 text-center animate-in zoom-in-95 duration-200">
+                        <div className="w-20 h-20 bg-gradient-to-tr from-brand-primary to-brand-secondary rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
+                            <Search className="text-white" size={32} />
+                        </div>
+                        <h3 className="text-2xl font-extrabold mb-3 text-black dark:text-white">Unlock Global Search</h3>
+                        <p className="text-gray-600 dark:text-gray-300 mb-8 font-medium">
+                            Search across all your folders instantly. Upgrade to Premium to unlock this feature and more!
+                        </p>
+                        <div className="flex flex-col gap-3">
+                            <button
+                                onClick={() => {
+                                    setShowPremiumModal(false);
+                                    navigate('/payment');
+                                }}
+                                className="w-full py-4 font-bold bg-brand-primary text-white rounded-xl shadow-md hover:bg-brand-secondary transition-colors text-lg"
+                            >
+                                Upgrade Now
+                            </button>
+                            <button
+                                onClick={() => setShowPremiumModal(false)}
+                                className="w-full py-4 font-bold text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+                            >
+                                Maybe Later
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </header>
     );
 };

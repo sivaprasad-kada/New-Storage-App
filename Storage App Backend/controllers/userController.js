@@ -6,6 +6,7 @@ import bcrypt from "bcrypt"
 import sessionSchema from "../models/sessionModel.js";
 import { verifyIdToken } from "../services/googleAuthService.js";
 import axios from "axios"
+import { PLAN_FEATURES } from "../utils/planFeatures.js";
 export const register = async (req, res, next) => {
   const { ObjectId } = mongoose.Types;
   const { name, email, password } = req.body;
@@ -62,6 +63,14 @@ export const register = async (req, res, next) => {
 
     await session.commitTransaction();
     committed = true;  // <<< ONLY WORKS IF declared above
+    
+    const newSession = await sessionSchema.create({ userId: userId });
+    res.cookie("token", newSession.id, {
+      httpOnly: true,
+      signed: true,
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 1 hour
+    });
+    
     res.status(201).json({ message: "User Registered" });
   } catch (err) {
     if (!committed) {
@@ -77,26 +86,36 @@ export const login = async (req, res) => {
   const { email, password } = req.body;
   console.log(email, password)
   const user = await User.findOne({ email }).select("+password");
-  console.log("this is from login route", user.password)
   if (!user) {
     return res.status(404).json({ error: "Invalid Credentials" });
   }
+
+  if (!user.password) {
+    return res.status(400).json({ error: "This account was created using Google/GitHub login." });
+  }
+
   const isPasswordValid = await bcrypt.compare(password, user.password);
   console.log(isPasswordValid)
   if (!isPasswordValid) {
     return res.status(404).json({ error: "Invalid Credentials from password" });
   }
-  const allSessions = await sessionSchema.find({ userId: user.id });
+  const allSessions = await sessionSchema.find({ userId: user.id }).sort({ createdAt: 1 });
 
-  if (allSessions.length >= 2) {
-    await allSessions[0].deleteOne();
+  const maxSessions = PLAN_FEATURES[user.plan?.toLowerCase() || 'free']?.activeSessions || 1;
+
+  if (allSessions.length >= maxSessions) {
+    // Delete the oldest session(s) to make room
+    const sessionsToDelete = allSessions.length - maxSessions + 1;
+    for (let i = 0; i < sessionsToDelete; i++) {
+      await allSessions[i].deleteOne();
+    }
   }
   const session = await sessionSchema.create({ userId: user._id });
 
   res.cookie("token", session.id, {
     httpOnly: true,
     signed: true,
-    maxAge: 60 * 1000 * 60
+    maxAge: 7 * 24 * 60 * 60 * 1000
   });
   res.json({ message: "logged in" });
 };
@@ -113,14 +132,19 @@ export const getCurrentUser = (req, res) => {
     documentBytes: req.user.documentBytes || 0,
     otherBytes: req.user.otherBytes || 0,
     picture: req.user.picture,
+    plan: req.user.plan,
+    subscriptionStatus: req.user.subscriptionStatus,
+    uploadsBlocked: req.user.uploadsBlocked,
+    selectedTheme: req.user.selectedTheme || "blue",
   });
 };
 export const logout = async (req, res) => {
-  console.log("logout route is triggered")
   const { token } = req.signedCookies;
-  await sessionSchema.findByIdAndDelete(token);
-  res.clearCookie("token");
-  res.status(204).end();
+  if (token) {
+    await sessionSchema.findByIdAndDelete(token).catch(() => {});
+  }
+  res.clearCookie("token", { httpOnly: true, signed: true });
+  return res.status(204).end();
 };
 export const logoutAll = async (req, res) => {
   const { token } = req.signedCookies;
@@ -164,7 +188,7 @@ export const googleLogin = async (req, res, next) => {
             userId,
           },
         ],
-        { mongooseSession }
+        { session: mongooseSession }
       );
 
       // User must be an array when passing mongooseSession
@@ -178,15 +202,15 @@ export const googleLogin = async (req, res, next) => {
             rootDirId,
           },
         ],
-        { mongooseSession }
+        { session: mongooseSession }
       );
       await mongooseSession.commitTransaction();
       committed = true;
-      const session = await sessionSchema.create({ userId: user._id });
+      const session = await sessionSchema.create({ userId: userId });
       res.cookie("token", session.id, {
         httpOnly: true,
         signed: true,
-        maxAge: 60 * 1000 * 10,
+        maxAge: 7 * 24 * 60 * 60 * 1000,
       });
       res.status(201).json({ message: "User Registered" });
     } catch (err) {
@@ -199,17 +223,21 @@ export const googleLogin = async (req, res, next) => {
 
   }
   else {
-    const user = await User.findOne({ email }).select("+password");
-    const allSessions = await sessionSchema.find({ userId: user.id });
-    if (allSessions.length >= 2) {
-      await allSessions[0].deleteOne();
-      res.status(200).json("User already Exists")
+    const existingUser = await User.findOne({ email }).select("+password");
+    const allSessions = await sessionSchema.find({ userId: existingUser.id }).sort({ createdAt: 1 });
+    
+    const maxSessions = PLAN_FEATURES[existingUser.plan?.toLowerCase() || 'free']?.activeSessions || 1;
+    if (allSessions.length >= maxSessions) {
+      const sessionsToDelete = allSessions.length - maxSessions + 1;
+      for (let i = 0; i < sessionsToDelete; i++) {
+        await allSessions[i].deleteOne();
+      }
     }
-    const session = await sessionSchema.create({ userId: user._id });
+    const session = await sessionSchema.create({ userId: existingUser._id });
     res.cookie("token", session.id, {
       httpOnly: true,
       signed: true,
-      maxAge: 60 * 1000 * 10
+      maxAge: 7 * 24 * 60 * 60 * 1000
     });
     res.json({ message: "logged in" });
   }
@@ -336,7 +364,7 @@ export const gitHubCallback = async (req, res) => {
         res.cookie("token", session.id, {
           httpOnly: true,
           signed: true,
-          maxAge: 60 * 60 * 1000
+          maxAge: 7 * 24 * 60 * 60 * 1000
         });
 
         return res.status(201).json({
@@ -355,10 +383,14 @@ export const gitHubCallback = async (req, res) => {
     }
 
     // 5️⃣ Existing user login
-    const allSessions = await sessionSchema.find({ userId: user._id });
+    const allSessions = await sessionSchema.find({ userId: user._id }).sort({ createdAt: 1 });
+    const maxSessions = PLAN_FEATURES[user.plan?.toLowerCase() || 'free']?.activeSessions || 1;
 
-    if (allSessions.length >= 2) {
-      await allSessions[0].deleteOne();
+    if (allSessions.length >= maxSessions) {
+      const sessionsToDelete = allSessions.length - maxSessions + 1;
+      for (let i = 0; i < sessionsToDelete; i++) {
+        await allSessions[i].deleteOne();
+      }
     }
 
     const session = await sessionSchema.create({
@@ -368,7 +400,7 @@ export const gitHubCallback = async (req, res) => {
     res.cookie("token", session.id, {
       httpOnly: true,
       signed: true,
-      maxAge: 60 * 60 * 1000
+      maxAge: 7 * 24 * 60 * 60 * 1000
     });
 
     return res.status(202).json({
@@ -388,5 +420,51 @@ export const gitHubCallback = async (req, res) => {
     }
     console.error("GitHub OAuth error:", err.response?.data || err.message);
     res.status(500).json({ error: "Something went wrong" });
+  }
+};
+// Theme API - allowed themes per plan
+const ALLOWED_THEMES = {
+  free:  ["blue"],
+  basic: ["blue"],
+  pro:   ["blue", "red", "green", "purple"],
+};
+
+/**
+ * GET /user/theme
+ * Returns the authenticated user's saved theme.
+ */
+export const getTheme = (req, res) => {
+  const theme = req.user.selectedTheme || "blue";
+  return res.status(200).json({ success: true, theme });
+};
+
+/**
+ * PATCH /user/theme
+ * Updates the authenticated user's theme.
+ * Only pro users may set non-blue themes.
+ */
+export const updateTheme = async (req, res) => {
+  const { theme } = req.body;
+
+  if (!theme || typeof theme !== "string") {
+    return res.status(400).json({ success: false, error: "theme is required" });
+  }
+
+  const plan = req.user.plan || "free";
+  const allowed = ALLOWED_THEMES[plan] || ALLOWED_THEMES.free;
+
+  if (!allowed.includes(theme)) {
+    return res.status(403).json({
+      success: false,
+      error: `Theme "${theme}" is not allowed on the ${plan} plan. Upgrade to Pro to unlock premium themes.`,
+    });
+  }
+
+  try {
+    await User.findByIdAndUpdate(req.user._id, { selectedTheme: theme });
+    return res.status(200).json({ success: true, theme });
+  } catch (err) {
+    console.error("updateTheme error:", err);
+    return res.status(500).json({ success: false, error: "Failed to update theme" });
   }
 };

@@ -24,13 +24,16 @@ const Placeholder = ({ title }) => (
   </div>
 );
 
+import WarningBanner from './components/WarningBanner';
+
 const AppLayout = ({ children }) => {
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-slate-900 overflow-hidden transition-colors duration-300">
+        <div className="flex h-screen bg-gray-50 dark:bg-slate-900 overflow-hidden transition-colors duration-300">
       <Sidebar />
-      <div className="flex-1 flex flex-col h-screen overflow-hidden relative">
+      <div className="flex-1 flex flex-col h-screen overflow-hidden relative min-w-0">
         <Header />
-        <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8 scroll-smooth">
+        <WarningBanner />
+        <main className="flex-1 overflow-auto p-3 sm:p-5 lg:p-8 scroll-smooth">
           {children}
         </main>
       </div>

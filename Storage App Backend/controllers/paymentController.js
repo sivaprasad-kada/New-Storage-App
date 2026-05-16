@@ -1,6 +1,7 @@
 import { razorpay, verifyRazorpaySignature } from "../services/razorpayService.js";
 import User from "../models/userModel.js";
 import Payment from "../models/paymentModel.js";
+import SubscriptionHistory from "../models/subscriptionHistoryModel.js";
 import { plans } from "../config/plans.js";
 import crypto from "crypto";
 
@@ -13,19 +14,46 @@ export const createSubscription = async (req, res) => {
       return res.status(400).json({ status: "fail", message: "Invalid plan selected." });
     }
 
+    const user = await User.findById(userId);
+
     if (planId === "free") {
-      await User.findByIdAndUpdate(userId, {
+      const oldPlan = user.plan;
+      const oldBillingCycle = user.billingCycle;
+
+      if (user.razorpaySubscriptionId) {
+        try {
+            await razorpay.subscriptions.cancel(user.razorpaySubscriptionId);
+        } catch(e) {
+            console.log("Failed to cancel Razorpay subscription during downgrade", e);
+        }
+      }
+
+      const storageLimit = plans.free.storageLimit;
+      const uploadsBlocked = user.usedStorageInBytes > storageLimit;
+
+      const updatedUser = await User.findByIdAndUpdate(userId, {
         plan: "free",
         billingCycle: "monthly",
-        maxStorageInBytes: plans.free.storageLimit,
+        maxStorageInBytes: storageLimit,
         subscriptionStatus: "active",
         razorpaySubscriptionId: null,
+        uploadsBlocked
+      }, { new: true });
+
+      await SubscriptionHistory.create({
+        userId,
+        oldPlan,
+        newPlan: "free",
+        oldBillingCycle,
+        newBillingCycle: "monthly",
+        actionType: "downgrade"
       });
+
       return res.status(200).json({ status: "success", message: "Switched to free plan successfully." });
     }
 
     const rzpPlanId = plans[planId].razorpayPlanId[billingCycle];
-    
+
     if (!rzpPlanId) {
       return res.status(500).json({ status: "fail", message: "Razorpay plan ID not configured." });
     }
@@ -33,7 +61,7 @@ export const createSubscription = async (req, res) => {
     const subscription = await razorpay.subscriptions.create({
       plan_id: rzpPlanId,
       customer_notify: 1,
-      total_count: billingCycle === "yearly" ? 10 : 120,
+      total_count: billingCycle === "yearly" ? 5 : 60,
     });
 
     res.status(200).json({
@@ -57,20 +85,43 @@ export const verifyPayment = async (req, res) => {
       return res.status(400).json({ status: "fail", message: "Payment verification failed." });
     }
 
+    const user = await User.findById(userId);
+
+    if (user.razorpaySubscriptionId && user.razorpaySubscriptionId !== razorpay_subscription_id) {
+       try {
+           await razorpay.subscriptions.cancel(user.razorpaySubscriptionId);
+       } catch (e) {
+           console.log("Failed to cancel old subscription.", e);
+       }
+    }
+
+    const oldPlan = user.plan;
+    const oldBillingCycle = user.billingCycle;
+    const newStorageLimit = plans[planId].storageLimit;
+    const uploadsBlocked = user.usedStorageInBytes > newStorageLimit;
+    
+    let actionType = "upgrade";
+    if (plans[oldPlan] && plans[oldPlan].storageLimit > newStorageLimit) {
+        actionType = "downgrade";
+    } else if (oldPlan === planId && oldBillingCycle !== billingCycle) {
+        actionType = "cycle_change";
+    }
+
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       {
         plan: planId,
         billingCycle: billingCycle,
-        maxStorageInBytes: plans[planId].storageLimit,
+        maxStorageInBytes: newStorageLimit,
         subscriptionStatus: "active",
         razorpaySubscriptionId: razorpay_subscription_id,
         subscriptionStartDate: new Date(),
+        uploadsBlocked
       },
       { new: true }
     );
 
-    await Payment.create({
+    const payment = await Payment.create({
       userId,
       plan: planId,
       billingCycle,
@@ -78,6 +129,16 @@ export const verifyPayment = async (req, res) => {
       razorpayPaymentId: razorpay_payment_id,
       razorpaySubscriptionId: razorpay_subscription_id,
       status: "captured",
+    });
+
+    await SubscriptionHistory.create({
+      userId,
+      oldPlan,
+      newPlan: planId,
+      oldBillingCycle,
+      newBillingCycle: billingCycle,
+      actionType,
+      paymentId: payment._id.toString()
     });
 
     res.status(200).json({
@@ -100,14 +161,33 @@ export const cancelSubscription = async (req, res) => {
       return res.status(400).json({ status: "fail", message: "No active subscription found." });
     }
 
-    await razorpay.subscriptions.cancel(user.razorpaySubscriptionId);
+    try {
+        await razorpay.subscriptions.cancel(user.razorpaySubscriptionId);
+    } catch (e) {
+        console.log("Error cancelling razorpay subscription", e);
+    }
+
+    const oldPlan = user.plan;
+    const oldBillingCycle = user.billingCycle;
+    const newStorageLimit = plans.free.storageLimit;
+    const uploadsBlocked = user.usedStorageInBytes > newStorageLimit;
 
     user.plan = "free";
     user.billingCycle = "monthly";
-    user.maxStorageInBytes = plans.free.storageLimit;
+    user.maxStorageInBytes = newStorageLimit;
     user.subscriptionStatus = "cancelled";
     user.razorpaySubscriptionId = null;
+    user.uploadsBlocked = uploadsBlocked;
     await user.save();
+
+    await SubscriptionHistory.create({
+      userId,
+      oldPlan,
+      newPlan: "free",
+      oldBillingCycle,
+      newBillingCycle: "monthly",
+      actionType: "cancel"
+    });
 
     res.status(200).json({ status: "success", message: "Subscription cancelled successfully." });
   } catch (error) {
@@ -120,7 +200,8 @@ export const getBillingHistory = async (req, res) => {
   try {
     const userId = req.user._id;
     const payments = await Payment.find({ userId }).sort({ createdAt: -1 });
-    res.status(200).json({ status: "success", data: payments });
+    const history = await SubscriptionHistory.find({ userId }).sort({ createdAt: -1 });
+    res.status(200).json({ status: "success", data: payments, history });
   } catch (error) {
     res.status(500).json({ status: "fail", message: "Failed to fetch billing history." });
   }
@@ -129,16 +210,14 @@ export const getBillingHistory = async (req, res) => {
 export const razorpayWebhook = async (req, res) => {
   try {
     const signature = req.headers["x-razorpay-signature"];
-    const body = req.body; 
+    const body = req.body;
+    console.log("Webhook body:", body);
     
-    // Validate signature securely
     const expectedSignature = crypto
       .createHmac("sha256", process.env.RAZORPAY_WEBHOOK_SECRET)
       .update(JSON.stringify(body))
       .digest("hex");
 
-    // Depending on Express middleware, JSON.stringify might alter the exact raw string, 
-    // but typically it works if body parser matches Razorpay's format exactly or if you capture raw body.
     if (expectedSignature !== signature) {
       return res.status(400).send("Invalid signature");
     }
@@ -152,26 +231,54 @@ export const razorpayWebhook = async (req, res) => {
 
       const user = await User.findOne({ razorpaySubscriptionId: subscription.id });
       if (user) {
-        await Payment.create({
-          userId: user._id,
-          plan: user.plan,
-          billingCycle: user.billingCycle,
-          amount: payment.amount / 100, 
-          razorpayPaymentId: payment.id,
-          razorpaySubscriptionId: subscription.id,
-          status: "captured",
-        });
+        const existingPayment = await Payment.findOne({ razorpayPaymentId: payment.id });
+        if (!existingPayment) {
+            await Payment.create({
+            userId: user._id,
+            plan: user.plan,
+            billingCycle: user.billingCycle,
+            amount: payment.amount / 100,
+            razorpayPaymentId: payment.id,
+            razorpaySubscriptionId: subscription.id,
+            status: "captured",
+            });
+        }
       }
     } else if (event === "subscription.cancelled" || event === "subscription.halted") {
       const subscription = payload.subscription.entity;
       const user = await User.findOne({ razorpaySubscriptionId: subscription.id });
-      if (user) {
+      if (user && user.plan !== 'free') {
+        const oldPlan = user.plan;
+        const oldBillingCycle = user.billingCycle;
+        const newStorageLimit = plans.free.storageLimit;
+        const uploadsBlocked = user.usedStorageInBytes > newStorageLimit;
+
         user.plan = "free";
-        user.maxStorageInBytes = plans.free.storageLimit;
+        user.billingCycle = "monthly";
+        user.maxStorageInBytes = newStorageLimit;
         user.subscriptionStatus = "cancelled";
         user.razorpaySubscriptionId = null;
+        user.uploadsBlocked = uploadsBlocked;
         await user.save();
+
+        await SubscriptionHistory.create({
+            userId: user._id,
+            oldPlan,
+            newPlan: "free",
+            oldBillingCycle,
+            newBillingCycle: "monthly",
+            actionType: "cancel"
+        });
       }
+    } else if (event === "subscription.activated") {
+       const subscription = payload.subscription.entity;
+       const user = await User.findOne({ razorpaySubscriptionId: subscription.id });
+       if (user) {
+          user.subscriptionStatus = "active";
+          user.currentPeriodStart = new Date(subscription.current_start * 1000);
+          user.currentPeriodEnd = new Date(subscription.current_end * 1000);
+          await user.save();
+       }
     }
 
     res.status(200).send("OK");

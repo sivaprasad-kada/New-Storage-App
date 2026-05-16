@@ -66,12 +66,12 @@ const Storage = () => {
                 <p className="text-gray-500 font-bold text-sm">Understand how your storage is being used</p>
             </div>
 
-            <h2 className="text-2xl font-normal text-black dark:text-white mb-6">Storage Overview</h2>
+            <h2 className="text-xl sm:text-2xl font-normal text-black dark:text-white mb-4 sm:mb-6">Storage Overview</h2>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-12 items-start">
                 {/* Chart Section */}
-                <div className="flex flex-col items-center justify-center relative bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-gray-100 dark:border-slate-700">
-                    <div className="relative w-64 h-64">
+                <div className="flex flex-col items-center justify-center relative bg-white dark:bg-slate-800 p-5 sm:p-8 rounded-2xl sm:rounded-3xl shadow-sm border border-gray-100 dark:border-slate-700">
+                    <div className="relative w-40 h-40 sm:w-56 md:w-64 sm:h-56 md:h-64">
                         {/* SVG Donut Chart */}
                         <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
                             {/* Background Circle */}
@@ -123,7 +123,7 @@ const Storage = () => {
                     </div>
 
                     {/* Stat Cards */}
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 gap-3 sm:gap-4">
                         {categories.map((cat, i) => {
                             const percent = ((cat.bytes / (totalUsed || 1)) * 100).toFixed(1);
                             return (

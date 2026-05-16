@@ -1,0 +1,43 @@
+export const PLAN_FEATURES = {
+  free: {
+    emailInvites: false,
+    globalSearch: false,
+    secureVault: false,
+    customThemes: false,
+    googleDriveImport: false,
+    activeSessions: 1,
+    fileSharing: false,
+    passwordProtectedSharing: false,
+    sharingExpiryDays: 0,
+    maxShareDownloads: 0,
+  },
+  basic: {
+    emailInvites: true,
+    globalSearch: true,
+    secureVault: true,
+    customThemes: true,
+    googleDriveImport: true,
+    activeSessions: 1,
+    fileSharing: true,
+    passwordProtectedSharing: false,
+    sharingExpiryDays: 30,
+    maxShareDownloads: 20,
+  },
+  pro: {
+    emailInvites: true,
+    globalSearch: true,
+    secureVault: true,
+    customThemes: true,
+    googleDriveImport: true,
+    activeSessions: 2,
+    fileSharing: true,
+    passwordProtectedSharing: true,
+    sharingExpiryDays: null,
+    maxShareDownloads: null,
+  },
+};
+
+export const hasFeature = (userPlan, feature) => {
+  const plan = userPlan?.toLowerCase() || 'free';
+  return PLAN_FEATURES[plan] ? PLAN_FEATURES[plan][feature] : false;
+};

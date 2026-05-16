@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { X, Link, Copy, Check, Lock, Calendar, DownloadCloud, Globe } from 'lucide-react';
+import { X, Link, Copy, Check, Lock, Calendar, DownloadCloud, Globe, AlertTriangle } from 'lucide-react';
+import { usePlanAccess } from '../hooks/usePlanAccess';
+import AlertModal from './AlertModal';
 
 const ShareModal = ({ isOpen, onClose, file, onShare }) => {
     const [accessType, setAccessType] = useState('public');
@@ -13,6 +15,11 @@ const ShareModal = ({ isOpen, onClose, file, onShare }) => {
     const [copied, setCopied] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [inviteOptions, setInviteOptions] = useState(false);
+    const [alertConfig, setAlertConfig] = useState({ isOpen: false, title: '', message: '', type: 'info' });
+
+    const { hasAccess: canShare, loading, limit } = usePlanAccess('fileSharing');
+    const { hasAccess: canPasswordProtect } = usePlanAccess('passwordProtectedSharing');
+    const { hasAccess: canEmailInvite } = usePlanAccess('emailInvites');
 
     if (!isOpen) return null;
 
@@ -24,7 +31,7 @@ const ShareModal = ({ isOpen, onClose, file, onShare }) => {
                 permission,
                 expiresAt: expiresAt || null,
                 password: email ? null : (password || null),
-                maxDownloads: email ? null : (maxDownloads ? parseInt(maxDownloads) : null),
+                maxDownloads: email ? null : (maxDownloads ? parseInt(maxDownloads) : limit?.maxShareDownloads),
                 email: email || null
             });
             setShareData(data);
@@ -32,7 +39,12 @@ const ShareModal = ({ isOpen, onClose, file, onShare }) => {
             if (error.message === "User not found") {
                 setInviteOptions(true);
             } else {
-                console.error(error);
+                setAlertConfig({
+                    isOpen: true,
+                    title: 'Error Sharing File',
+                    message: error.message || 'Something went wrong while trying to share the file.',
+                    type: 'error'
+                });
             }
         } finally {
             setIsLoading(false);
@@ -121,6 +133,19 @@ const ShareModal = ({ isOpen, onClose, file, onShare }) => {
                             </button>
                         </div>
                     </div>
+                ) : !canShare && !loading ? (
+                    <div className="space-y-6 text-center py-4">
+                        <div className="w-16 h-16 bg-brand-primary/10 text-brand-primary rounded-full flex items-center justify-center mx-auto mb-4">
+                            <Lock size={32} />
+                        </div>
+                        <div>
+                            <h4 className="text-lg font-bold text-black dark:text-white">Premium Feature</h4>
+                            <p className="text-sm font-medium text-gray-500">File sharing is available on Basic and Pro plans.</p>
+                        </div>
+                        <a href="/payment" className="w-full block py-3 font-bold bg-brand-primary text-white rounded-xl shadow-lg hover:bg-brand-secondary transition-colors text-center">
+                            Upgrade Now
+                        </a>
+                    </div>
                 ) : !shareData ? (
                     <div className="space-y-4">
                         {/* Settings Form */}
@@ -130,8 +155,9 @@ const ShareModal = ({ isOpen, onClose, file, onShare }) => {
                                 <input 
                                     type="email" 
                                     placeholder="Enter email address (optional)"
-                                    className="bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-medium dark:text-white outline-none focus:border-brand-primary"
+                                    className="bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-medium dark:text-white outline-none focus:border-brand-primary disabled:opacity-50"
                                     value={email}
+                                    disabled={!canEmailInvite}
                                     onChange={(e) => {
                                         setEmail(e.target.value);
                                         if (e.target.value) {
@@ -144,6 +170,11 @@ const ShareModal = ({ isOpen, onClose, file, onShare }) => {
                                 {email && (
                                     <p className="text-xs font-medium text-brand-primary mt-0.5">
                                         Private share — file will be shared directly with this user.
+                                    </p>
+                                )}
+                                {!canEmailInvite && (
+                                    <p className="text-[10px] font-bold text-orange-500 mt-0.5 flex items-center gap-1">
+                                        <Lock size={10} /> Email invites available on Premium plans.
                                     </p>
                                 )}
                             </div>
@@ -168,28 +199,40 @@ const ShareModal = ({ isOpen, onClose, file, onShare }) => {
                                     value={expiresAt}
                                     onChange={(e) => setExpiresAt(e.target.value)}
                                 />
+                                {limit?.sharingExpiryDays > 0 && (
+                                    <p className="text-[10px] font-bold text-gray-400 mt-0.5">
+                                        Max expiry: {limit.sharingExpiryDays} days for your plan.
+                                    </p>
+                                )}
                             </div>
 
                             {/* Password and Max Downloads — only for public/link shares, NOT for email (private) shares */}
                             {!email && (
                                 <>
-                                    <div className="flex flex-col gap-1">
+                                    <div className="flex flex-col gap-1 relative">
                                         <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1"><Lock size={12}/> Password (Optional)</label>
                                         <input 
                                             type="password" 
-                                            placeholder="Set a password..."
-                                            className="bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-medium dark:text-white outline-none focus:border-brand-primary"
+                                            placeholder={canPasswordProtect ? "Set a password..." : "Requires Pro Plan"}
+                                            className="bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-medium dark:text-white outline-none focus:border-brand-primary disabled:opacity-50"
                                             value={password}
+                                            disabled={!canPasswordProtect}
                                             onChange={(e) => setPassword(e.target.value)}
                                         />
+                                        {!canPasswordProtect && (
+                                            <a href="/payment" className="text-[10px] font-bold text-brand-primary hover:underline mt-0.5 absolute right-0 top-0">
+                                                Upgrade to Pro
+                                            </a>
+                                        )}
                                     </div>
 
                                     <div className="flex flex-col gap-1">
                                         <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1"><DownloadCloud size={12}/> Max Downloads (Optional)</label>
                                         <input 
                                             type="number" 
-                                            placeholder="e.g. 5"
+                                            placeholder={`e.g. 5 ${limit?.maxShareDownloads ? `(Max ${limit.maxShareDownloads})` : ''}`}
                                             min="1"
+                                            max={limit?.maxShareDownloads || ''}
                                             className="bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-medium dark:text-white outline-none focus:border-brand-primary"
                                             value={maxDownloads}
                                             onChange={(e) => setMaxDownloads(e.target.value)}
@@ -201,7 +244,7 @@ const ShareModal = ({ isOpen, onClose, file, onShare }) => {
 
                         <button
                             onClick={handleShare}
-                            disabled={isLoading}
+                            disabled={isLoading || (email && !email.includes('@')) || (!email && accessType === 'private')}
                             className="w-full py-3 mt-4 font-bold bg-brand-primary text-white rounded-xl shadow-lg hover:bg-brand-secondary transition-colors disabled:opacity-50 cursor-pointer"
                         >
                             {isLoading ? (email ? 'Sharing...' : 'Generating Link...') : (email ? 'Share with User' : 'Generate Share Link')}
@@ -240,6 +283,14 @@ const ShareModal = ({ isOpen, onClose, file, onShare }) => {
                     </div>
                 )}
             </div>
+
+            <AlertModal
+                isOpen={alertConfig.isOpen}
+                onClose={() => setAlertConfig({ ...alertConfig, isOpen: false })}
+                title={alertConfig.title}
+                message={alertConfig.message}
+                type={alertConfig.type}
+            />
         </div>
     );
 };

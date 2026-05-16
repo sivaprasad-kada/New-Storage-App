@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import FileDetailsPanel from '../components/FileDetailsPanel';
 import { Lock, Fingerprint, Eye, ArrowLeft, Shield, Upload, Download, LayoutGrid, List, Info } from 'lucide-react';
+import { usePlanAccess } from '../hooks/usePlanAccess';
+import PremiumFeatureGate from '../components/PremiumFeatureGate';
 
 const SecureVault = () => {
     const [isUnlocked, setIsUnlocked] = useState(false);
@@ -11,6 +13,8 @@ const SecureVault = () => {
     const [viewMode, setViewMode] = useState(() => {
         return localStorage.getItem('secureVaultView') || 'grid';
     });
+
+    const { hasAccess, loading } = usePlanAccess('secureVault');
 
     useEffect(() => {
         localStorage.setItem('secureVaultView', viewMode);
@@ -26,6 +30,18 @@ const SecureVault = () => {
         { name: 'Passport_Copy.jpg', tags: ['identity', 'travel'], size: '3.5 mb', modified: '29/12/23' },
         { name: 'Tax_Returns_2024.pdf', tags: ['finance'], size: '5.2 mb', modified: '29/12/23' },
     ];
+
+    if (loading) return <div className="p-8 text-center text-gray-500">Loading Secure Vault...</div>;
+
+    if (!hasAccess) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] px-4">
+                <PremiumFeatureGate feature="secureVault">
+                    <div></div> {/* Empty children, gate will trigger fallback/blur */}
+                </PremiumFeatureGate>
+            </div>
+        );
+    }
 
     if (!isUnlocked) {
         return (
@@ -109,9 +125,9 @@ const SecureVault = () => {
                 </NavLink>
             </div>
 
-            <div className="flex flex-col xl:flex-row gap-8">
+            <div className="flex flex-col lg:flex-row gap-6 sm:gap-8">
                 {/* Left Mini Sidebar for Vault */}
-                <div className="w-full xl:w-72 shrink-0 space-y-4 sm:space-y-6 order-2 xl:order-1">
+                <div className="w-full lg:w-64 xl:w-72 shrink-0 space-y-4 sm:space-y-6">
 
                     <div className="bg-green-400 dark:bg-green-600 rounded-xl p-4 text-white shadow-sm flex items-center gap-3">
                         <Lock size={32} className="text-white fill-white" />
@@ -141,9 +157,9 @@ const SecureVault = () => {
                 </div>
 
                 {/* Main Vault Content */}
-                <div className="flex-1 order-1 xl:order-2">
-                    <div className="mb-6">
-                        <h1 className="text-3xl sm:text-4xl font-normal text-black dark:text-white mb-1">Secure Vault</h1>
+                <div className="flex-1">
+                    <div className="mb-4 sm:mb-6">
+                        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-normal text-black dark:text-white mb-1">Secure Vault</h1>
                         <p className="text-gray-500 dark:text-gray-400 font-medium">End-to-end encrypted file storage</p>
                     </div>
 

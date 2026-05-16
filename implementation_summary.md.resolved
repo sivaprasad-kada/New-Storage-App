@@ -1,0 +1,147 @@
+# Implementation Summary — Storage App Feature Update
+
+## 1. ✅ Bulk Delete Multiple Files
+
+### Backend
+- **`fileController.js`** — Added `bulkDeleteFiles`:
+  - Validates all IDs are valid ObjectIds
+  - Queries DB filtering by `userId` (ownership enforced — no folder docs included)
+  - Deletes MongoDB docs atomically with `deleteMany`
+  - Responds `{ success: true, deletedCount }` immediately
+  - Fire-and-forget background: parallel S3 deletes via `Promise.allSettled`, user storage aggregation, Redis invalidation
+
+- **`fileRoutes.js`** — Added `DELETE /file/bulk-delete` route **before** `/:id` to avoid wildcard conflict
+
+### Frontend
+- **`Dashboard.jsx`** — Added `selectedFileIds`, `showBulkDeleteModal`, `isBulkDeleting` state + `toggleFileSelection`, `selectAllFiles`, `deselectAllFiles`, `executeBulkDelete` handlers
+- **Bulk Action Toolbar** — Appears above file list when any file is selected; has Select All / Deselect All / Delete Selected buttons
+- **`RecentActivity.jsx`** — Added checkbox per file card (hidden until selection starts); cards get blue ring on selection; clicking a card in selection mode toggles it instead of opening the file
+- Two `ConfirmationModal` instances: one for single delete, one for bulk
+
+---
+
+## 2. ✅ Restrict Duplicate File Name Uploads
+
+### Backend
+- **`fileController.js` → `uploadInitiate`** — Added query before creating the file record:
+  ```js
+  File.findOne({ userId, parentDirId, searchName: normalizedName, isUploading: false })
+  ```
+  Returns **HTTP 409** `{ success: false, message: "File ... already exists" }`
+- Uses existing `searchName` field (already lowercase) for case-insensitive comparison
+- Trimmed filename before check
+- Existing compound index `{ userId, parentDirId, searchName }` makes the query O(log n)
+
+### Frontend
+- **`Dashboard.jsx` → `uploadFile`** — Catches `409` and throws `duplicate:message` prefix
+- Upload queue item gets `isDuplicate: true` flag
+- Alert modal shows "Duplicate File" title (non-danger amber style) vs red "Upload Failed"
+- Other files in queue continue uploading normally
+
+---
+
+## 3. ✅ Individual File Upload Cancellation
+
+Already implemented in the existing code (XHR `abort()` on `cancelUpload(id)`). No changes needed — the existing implementation:
+- Each upload has its own XHR stored in `uploadQueue`
+- Cancel button calls `xhr.abort()` for only that file
+- Other uploads continue
+- Progress bar & status shown per file
+
+> **Note:** The upload panel with progress bars, cancel buttons, and retry is fully operational in `Dashboard.jsx` lines 490–526.
+
+---
+
+## 4. ✅ Navbar Logout Button Fix
+
+### Backend (`userController.js`)
+- `logout` now uses `.catch(() => {})` to silently ignore stale session errors
+- Passes explicit cookie options `{ httpOnly: true, signed: true }` to `clearCookie`
+
+### Frontend (`Header.jsx`)
+- Added `isLoggingOut` state
+- Closes all dropdowns immediately on click
+- Calls logout API but **always navigates to `/auth`** in `finally` — even if server returns error
+- Button shows spinning icon + "Logging out..." during request
+- Button is `disabled` during logout to prevent double-click
+- Uses `navigate('/auth', { replace: true })` to prevent back-navigation to protected page
+
+---
+
+## 5. ✅ Sidebar Close Button Fix (Desktop)
+
+### Frontend (`Sidebar.jsx` + `ThemeContext.jsx`)
+
+**ThemeContext** — Added `isSidebarCollapsed` state + `toggleSidebarCollapse` function (in-memory, no localStorage needed)
+
+**Sidebar** — Replaced the static dummy `<` button with:
+```jsx
+<button onClick={toggleSidebarCollapse}>
+  {isSidebarCollapsed ? <ChevronRight /> : <ChevronLeft />}
+</button>
+```
+
+Layout changes:
+- `lg:w-64` (expanded) → `lg:w-[4.5rem]` (collapsed icon-only mode)
+- Nav labels have `lg:hidden` when collapsed
+- Tooltips (`title` attr) show on icon-only mode for accessibility
+- Smooth `transition-all duration-300` on width
+- Mobile menu still works independently (`isMobileMenuOpen`)
+
+---
+
+## 6. ✅ Premium Theme Security Fix
+
+### Backend
+**`userModel.js`** — Added `selectedTheme: { type: String, enum: ['blue','red','green','purple'], default: 'blue' }`
+
+**`userController.js`** — Added:
+- `getTheme` — Returns `req.user.selectedTheme` (from DB)
+- `updateTheme` — Validates plan: `free/basic` → only `blue` allowed; `pro` → all themes. Returns **HTTP 403** if unauthorized
+- `getCurrentUser` — Now includes `selectedTheme` in response
+- Plan allowlist hardcoded server-side, never trusting frontend
+
+**`userRoutes.js`** — Added:
+```
+GET  /user/theme   → getTheme   (auth required)
+PATCH /user/theme  → updateTheme (auth required)
+```
+
+### Frontend
+**`ThemeContext.jsx`** — Complete rewrite:
+- ❌ Removed all `localStorage` theme reads/writes
+- ✅ Fetches theme from `GET /user/theme` on mount
+- ✅ `setThemeColor(theme)` now calls `PATCH /user/theme` and returns `{ success, error, status }`
+- `themeLoading` state prevents flash
+- Default blue applied immediately as fallback if fetch fails
+
+**`Settings.jsx`** — Theme selector:
+- Calls `handleThemeSelect(themeId)` → async wrapper around `setThemeColor`
+- On **403** → shows Upgrade modal with "Upgrade to Pro" CTA
+- Premium themes show 👑 Crown badge + 🔒 Lock icon
+- `isPremiumLocked = theme.premium && user.plan !== 'pro'` for UI hint (display only)
+- Backend is the actual enforcement layer
+
+---
+
+## Files Modified
+
+| File | Change |
+|------|--------|
+| `Backend/models/userModel.js` | Added `selectedTheme` field |
+| `Backend/controllers/fileController.js` | Added `bulkDeleteFiles`, duplicate check in `uploadInitiate` |
+| `Backend/controllers/userController.js` | Added `getTheme`, `updateTheme`, fixed `logout`, updated `getCurrentUser` |
+| `Backend/routes/fileRoutes.js` | Added `DELETE /file/bulk-delete` route |
+| `Backend/routes/userRoutes.js` | Added `GET /user/theme`, `PATCH /user/theme` routes |
+| `Frontend/src/context/ThemeContext.jsx` | Full rewrite — secure backend theme, sidebar collapse state |
+| `Frontend/src/components/Sidebar.jsx` | Fixed collapse button, added icon-only mode |
+| `Frontend/src/components/Header.jsx` | Fixed logout with loading state, close all menus |
+| `Frontend/src/components/RecentActivity.jsx` | Added checkbox selection UI |
+| `Frontend/src/pages/Dashboard.jsx` | Added bulk delete, duplicate 409 handling |
+| `Frontend/src/pages/Settings.jsx` | Secure theme selector with upgrade modal |
+
+> [!IMPORTANT]
+> The `selectedTheme` field is new in the DB schema. Existing users without it will default to `"blue"` via the schema default — no migration needed.
+
+> [!NOTE]
+> The `MyFiles.jsx` page (separate from Dashboard) may also need the bulk delete and checkbox wiring if it has its own file list. Apply the same `selectedFileIds` + `RecentActivity` props pattern there.

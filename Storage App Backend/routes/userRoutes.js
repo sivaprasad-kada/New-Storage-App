@@ -11,7 +11,9 @@ import {
   getAllUsers,
   logoutById,
   DeleteUser,
-  gitHubCallback
+  gitHubCallback,
+  getTheme,
+  updateTheme,
 } from "../controllers/userController.js";
 
 const router = express.Router();
@@ -27,7 +29,12 @@ router.post("/user/logout", logout);
 router.post("/user/logoutAll", logoutAll);
 
 router.post("/user/google",googleLogin);
-router.post("/user/github/callback",gitHubCallback)
+router.post("/user/github/callback",gitHubCallback);
+
+// Theme routes (secured)
+router.get("/user/theme", checkAuth, getTheme);
+router.patch("/user/theme", checkAuth, updateTheme);
+
 router.get(
   "/users",
   checkAuth,

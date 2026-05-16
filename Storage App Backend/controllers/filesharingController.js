@@ -6,6 +6,7 @@ import File from "../models/fileModel.js";
 import User from "../models/userModel.js";
 import Notification from "../models/notificationModel.js";
 import { createGetSignedUrl } from "../config/s3.js";
+import { PLAN_FEATURES } from "../utils/planFeatures.js";
 
 // Create Share Link
 export const createShareLink = async (req, res) => {
@@ -35,8 +36,33 @@ export const createShareLink = async (req, res) => {
 
     const shareToken = crypto.randomBytes(16).toString("hex");
 
+    const userPlan = req.user?.plan?.toLowerCase() || 'free';
+    const planLimits = PLAN_FEATURES[userPlan] || PLAN_FEATURES.free;
+
+    if (!planLimits.fileSharing) {
+      return res.status(403).json({ error: "File sharing requires a premium plan." });
+    }
+
+    if (password && !planLimits.passwordProtectedSharing) {
+      return res.status(403).json({ error: "Password protection requires Pro plan." });
+    }
+
+    if (planLimits.sharingExpiryDays !== null) {
+      const maxExpiryDate = new Date();
+      maxExpiryDate.setDate(maxExpiryDate.getDate() + planLimits.sharingExpiryDays);
+      if (!expiresAt || new Date(expiresAt) > maxExpiryDate) {
+        return res.status(403).json({ error: `Max expiry is ${planLimits.sharingExpiryDays} days on your current plan.` });
+      }
+    }
+
+    if (planLimits.maxShareDownloads !== null) {
+      if (!maxDownloads || maxDownloads > planLimits.maxShareDownloads) {
+         return res.status(403).json({ error: `Max downloads limit is ${planLimits.maxShareDownloads} on your current plan.` });
+      }
+    }
+
     let hashedPassword = null;
-    if (password) {
+    if (password && planLimits.passwordProtectedSharing) {
       hashedPassword = await bcrypt.hash(password, 10);
     }
 

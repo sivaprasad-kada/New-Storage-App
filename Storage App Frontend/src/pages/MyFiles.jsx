@@ -377,9 +377,9 @@ const MyFiles = () => {
                 />
 
                 {/* Header */}
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center justify-between mb-3 sm:mb-4">
                     <div>
-                        <h1 className="text-4xl font-normal text-black dark:text-white mb-1">My Cloud</h1>
+                        <h1 className="text-2xl sm:text-4xl font-normal text-black dark:text-white mb-1">My Cloud</h1>
                         <p className="text-gray-500 font-bold text-sm">Manage your personal files and folders</p>
                     </div>
                 </div>
@@ -400,17 +400,17 @@ const MyFiles = () => {
                     </div>
                 )}
 
-                {/* Action Buttons (Similar to Dashboard but horizontal bar style) */}
-                <div className="flex gap-3 mb-6">
+                {/* Action Buttons */}
+                <div className="flex flex-wrap gap-2 sm:gap-3 mb-4 sm:mb-6">
                     <button
                         onClick={() => setShowCreateDirModal(true)}
-                        className="bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 text-black dark:text-white hover:bg-gray-50 dark:hover:bg-slate-700 px-6 py-2 rounded-lg font-bold flex items-center gap-2 shadow-sm transition-colors">
-                        <Plus size={20} /> New Folder
+                        className="bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 text-black dark:text-white hover:bg-gray-50 dark:hover:bg-slate-700 px-4 sm:px-6 py-2 rounded-lg font-bold flex items-center gap-2 shadow-sm transition-colors text-sm">
+                        <Plus size={18} /> New Folder
                     </button>
                     <button
                         onClick={() => fileInputRef.current?.click()}
-                        className="bg-brand-primary hover:bg-brand-secondary text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 shadow-sm transition-colors">
-                        <Upload size={20} /> Upload File
+                        className="bg-brand-primary hover:bg-brand-secondary text-white px-4 sm:px-6 py-2 rounded-lg font-bold flex items-center gap-2 shadow-sm transition-colors text-sm">
+                        <Upload size={18} /> Upload File
                     </button>
                 </div>
 

@@ -1,21 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Eye, EyeOff, Save, LogOut, Brush, Check, ShieldAlert } from 'lucide-react';
+import { Eye, EyeOff, Save, LogOut, Brush, Check, ShieldAlert, Crown, Lock } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useNavigate } from 'react-router-dom';
 import ConfirmationModal from '../components/ConfirmationModal';
 
 const Settings = () => {
-    const { themeColor, setThemeColor } = useTheme();
+    const { themeColor, setThemeColor, themeLoading } = useTheme();
     const navigate = useNavigate();
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
     const [showLogoutAllModal, setShowLogoutAllModal] = useState(false);
+    const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+    const [themeError, setThemeError] = useState('');
+    const [isUpdatingTheme, setIsUpdatingTheme] = useState(false);
 
     const themes = [
-        { id: 'blue', color: '#0ea5e9', name: 'Sky Blue' },
-        { id: 'red', color: '#ef4444', name: 'Red' },
-        { id: 'green', color: '#22c55e', name: 'Green' },
-        { id: 'purple', color: '#a855f7', name: 'Purple' },
+        { id: 'blue',   color: '#0ea5e9', name: 'Sky Blue',  premium: false },
+        { id: 'red',    color: '#ef4444', name: 'Red',       premium: true },
+        { id: 'green',  color: '#22c55e', name: 'Green',     premium: true },
+        { id: 'purple', color: '#a855f7', name: 'Purple',    premium: true },
     ];
 
     useEffect(() => {
@@ -37,15 +40,29 @@ const Settings = () => {
 
     const handleLogout = async () => {
         try {
-            const res = await fetch(`${import.meta.env.VITE_BASE_URL}/user/logout`, {
+            await fetch(`${import.meta.env.VITE_BASE_URL}/user/logout`, {
                 method: 'POST',
-                credentials: 'include'
+                credentials: 'include',
             });
-            if (res.ok || res.status === 204) {
-                navigate('/auth');
-            }
         } catch (error) {
-            console.error("Logout failed", error);
+            console.error('Logout failed', error);
+        } finally {
+            navigate('/auth', { replace: true });
+        }
+    };
+
+    const handleThemeSelect = async (themeId) => {
+        if (isUpdatingTheme) return;
+        setThemeError('');
+        setIsUpdatingTheme(true);
+        const result = await setThemeColor(themeId);
+        setIsUpdatingTheme(false);
+        if (!result.success) {
+            if (result.status === 403) {
+                setShowUpgradeModal(true);
+            } else {
+                setThemeError(result.error || 'Failed to update theme');
+            }
         }
     };
 
@@ -70,39 +87,65 @@ const Settings = () => {
     if (loading) return <div className="p-8 text-center text-gray-500">Loading profile...</div>;
 
     return (
-        <div className="space-y-8 max-w-4xl mx-auto dark:text-white pb-20">
+        <div className="space-y-6 sm:space-y-8 max-w-4xl mx-auto dark:text-white pb-20">
             <div>
-                <h1 className="text-3xl sm:text-4xl font-normal text-black dark:text-white mb-1">Settings</h1>
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-normal text-black dark:text-white mb-1">Settings</h1>
                 <p className="text-gray-500 dark:text-gray-400 font-bold text-sm">Manage your profile, themes, and security</p>
             </div>
 
-            {/* Theme Selection Section */}
+                {/* Theme Selection Section */}
             <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 sm:p-8 border border-gray-200 dark:border-slate-700 shadow-sm transition-colors">
                 <div className="flex items-center gap-2 mb-6">
                     <Brush className="text-brand-primary" size={24} />
                     <h2 className="text-2xl font-bold text-black dark:text-white">Appearance</h2>
+                    {themeLoading && <span className="text-xs text-gray-400 ml-2 animate-pulse">Loading...</span>}
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    {themes.map((theme) => (
-                        <button
-                            key={theme.id}
-                            onClick={() => setThemeColor(theme.id)}
-                            className={`
-                  flex flex-col items-center gap-3 p-4 rounded-xl border-2 transition-all
-                  ${themeColor === theme.id ? 'border-brand-primary bg-brand-primary/5 dark:bg-white/5' : 'border-transparent hover:bg-gray-50 dark:hover:bg-slate-700'}
-                `}
-                        >
-                            <div
-                                className="w-12 h-12 rounded-full shadow-sm flex items-center justify-center transition-transform hover:scale-110"
-                                style={{ backgroundColor: theme.color }}
+                    {themes.map((theme) => {
+                        const isPremiumLocked = theme.premium && user?.plan !== 'pro';
+                        return (
+                            <button
+                                key={theme.id}
+                                onClick={() => handleThemeSelect(theme.id)}
+                                disabled={isUpdatingTheme}
+                                className={`
+                                    relative flex flex-col items-center gap-3 p-4 rounded-xl border-2 transition-all
+                                    ${themeColor === theme.id ? 'border-brand-primary bg-brand-primary/5 dark:bg-white/5' : 'border-transparent hover:bg-gray-50 dark:hover:bg-slate-700'}
+                                    ${isUpdatingTheme ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}
+                                `}
                             >
-                                {themeColor === theme.id && <Check className="text-white" size={20} />}
-                            </div>
-                            <span className="font-medium text-sm text-gray-700 dark:text-gray-300">{theme.name}</span>
-                        </button>
-                    ))}
+                                {/* Premium Crown badge */}
+                                {isPremiumLocked && (
+                                    <div className="absolute top-2 right-2">
+                                        <Crown size={14} className="text-amber-500" />
+                                    </div>
+                                )}
+                                <div
+                                    className="w-12 h-12 rounded-full shadow-sm flex items-center justify-center transition-transform hover:scale-110 relative"
+                                    style={{ backgroundColor: theme.color }}
+                                >
+                                    {themeColor === theme.id && <Check className="text-white" size={20} />}
+                                    {isPremiumLocked && themeColor !== theme.id && (
+                                        <Lock size={14} className="text-white/80" />
+                                    )}
+                                </div>
+                                <span className="font-medium text-sm text-gray-700 dark:text-gray-300">{theme.name}</span>
+                                {isPremiumLocked && (
+                                    <span className="text-[10px] font-bold text-amber-500 uppercase tracking-wide">Pro</span>
+                                )}
+                            </button>
+                        );
+                    })}
                 </div>
+
+                {themeError && (
+                    <p className="text-red-500 text-sm font-medium mt-3">{themeError}</p>
+                )}
+
+                <p className="text-xs text-gray-400 mt-4 font-medium">
+                    🔒 Premium themes are validated server-side. Upgrade to Pro to unlock all colors.
+                </p>
             </div>
 
             {/* Profile Section */}
@@ -192,6 +235,35 @@ const Settings = () => {
                 confirmText="Logout Everyone"
                 isDanger={true}
             />
+
+            {/* Upgrade Modal for Premium Themes */}
+            {showUpgradeModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl shadow-2xl w-full max-w-md border border-gray-200 dark:border-slate-800 text-center animate-in zoom-in-95 duration-200">
+                        <div className="w-20 h-20 bg-gradient-to-tr from-amber-400 to-amber-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
+                            <Crown className="text-white" size={32} />
+                        </div>
+                        <h3 className="text-2xl font-extrabold mb-3 text-black dark:text-white">Pro Themes</h3>
+                        <p className="text-gray-600 dark:text-gray-300 mb-8 font-medium">
+                            Premium color themes are exclusively available on the <strong>Pro plan</strong>. Upgrade to unlock full customization.
+                        </p>
+                        <div className="flex flex-col gap-3">
+                            <button
+                                onClick={() => { setShowUpgradeModal(false); navigate('/payment'); }}
+                                className="w-full py-4 font-bold bg-amber-500 text-white rounded-xl shadow-md hover:bg-amber-600 transition-colors text-lg"
+                            >
+                                Upgrade to Pro
+                            </button>
+                            <button
+                                onClick={() => setShowUpgradeModal(false)}
+                                className="w-full py-4 font-bold text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+                            >
+                                Maybe Later
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
         </div>
     );

@@ -51,6 +51,11 @@ const userSchema = new Schema({
     enum: ["free", "basic", "pro"],
     default: "free",
   },
+  selectedTheme: {
+    type: String,
+    enum: ["blue", "red", "green", "purple"],
+    default: "blue",
+  },
   billingCycle: {
     type: String,
     enum: ["monthly", "yearly"],
@@ -70,8 +75,15 @@ const userSchema = new Schema({
   currentPeriodEnd: {
     type: Date,
   },
+  currentPeriodStart: {
+    type: Date,
+  },
   subscriptionStartDate: {
     type: Date,
+  },
+  uploadsBlocked: {
+    type: Boolean,
+    default: false,
   },
 }, {
   strict: true,

@@ -34,10 +34,21 @@ export const getDirectory = async (req, res) => {
   const files = await File.find({ parentDirId: directoryData._id }).lean();
   const directories = await Directory.find({ parentDirId: _id }).lean();
 
+  let breadcrumbs = [];
+  let currentDir = directoryData;
+  while (currentDir && currentDir.parentDirId) {
+    const parent = await Directory.findOne({ _id: currentDir.parentDirId, userId: req.user._id }).lean();
+    if (!parent) break;
+    breadcrumbs.unshift({ id: parent._id, name: parent.name });
+    currentDir = parent;
+  }
+  breadcrumbs.push({ id: directoryData._id, name: directoryData.name });
+
   const responseData = {
     ...directoryData,
     files: files.map((dir) => ({ ...dir, id: dir._id })),
     directories: directories.map((dir) => ({ ...dir, id: dir._id })),
+    breadcrumbs,
   };
 
   // 2. Set Cache

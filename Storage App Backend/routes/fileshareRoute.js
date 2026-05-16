@@ -1,5 +1,6 @@
 import express from "express";
 import checkAuth from "../middlewares/authMiddleware.js";
+import { requireFeature } from "../middlewares/planMiddleware.js";
 import {
   createShareLink,
   accessSharedFile,
@@ -22,11 +23,11 @@ router.get("/s/:token", accessSharedFile);
 router.post("/api/share/:token/download", downloadSharedFile);
 
 // Protected routes
-router.post("/api/files/:fileId/share", checkAuth, createShareLink);
-router.patch("/api/share/:token/revoke", checkAuth, revokeShareLink);
-router.get("/api/share/my", checkAuth, listMyShares);
-router.get("/api/share/shared-with-me", checkAuth, listSharedWithMe);
-router.post("/api/share/invite", checkAuth, inviteUser);
+router.post("/api/files/:fileId/share", checkAuth, requireFeature('fileSharing'), createShareLink);
+router.patch("/api/share/:token/revoke", checkAuth, requireFeature('fileSharing'), revokeShareLink);
+router.get("/api/share/my", checkAuth, requireFeature('fileSharing'), listMyShares);
+router.get("/api/share/shared-with-me", checkAuth, requireFeature('fileSharing'), listSharedWithMe);
+router.post("/api/share/invite", checkAuth, requireFeature('emailInvites'), inviteUser);
 
 // Remove from shared views (soft delete — does NOT delete the actual file)
 // MUST be defined BEFORE the wildcard /api/share/:token route

@@ -118,7 +118,7 @@ const Auth = () => {
             setServerError(data.error);
         } else {
             // Registration success
-            navigate("/");
+            navigate("/dashboard");
         }
     };
     const handleGitHubLogin = () => {
@@ -151,9 +151,9 @@ const Auth = () => {
 
                 const data = await res.json();
                 console.log("Backend response:", data);
-                if (res.status == 202) {
+                if (res.status == 202 || res.status == 201) {
                     setTimeout(() => {
-                        navigate("/");
+                        navigate("/dashboard");
                     }, 2000)
                 }
                 window.removeEventListener("message", receiveMessage);
@@ -437,8 +437,8 @@ const Auth = () => {
 
                         <button
                             type="submit"
-                            disabled={!isSignIn && !otpVerified}
-                            className={`w-full text-white text-lg font-bold py-3.5 rounded-xl shadow-lg transition-all mt-6 ${!isSignIn && !otpVerified
+                            disabled={isSignIn ? (!email || !password) : (!name || !email || !password || !confirmPassword || !otpVerified)}
+                            className={`w-full text-white text-lg font-bold py-3.5 rounded-xl shadow-lg transition-all mt-6 ${(isSignIn ? (!email || !password) : (!name || !email || !password || !confirmPassword || !otpVerified))
                                 ? 'bg-gray-400 cursor-not-allowed'
                                 : 'bg-brand-primary hover:bg-brand-secondary hover:shadow-xl'
                                 }`}

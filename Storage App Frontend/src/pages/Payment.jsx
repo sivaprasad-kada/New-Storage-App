@@ -6,6 +6,9 @@ import { toast } from 'react-toastify';
 
 const loadRazorpay = () => {
     return new Promise((resolve) => {
+        if (window.Razorpay) {
+            return resolve(true);
+        }
         const script = document.createElement('script');
         script.src = 'https://checkout.razorpay.com/v1/checkout.js';
         script.onload = () => resolve(true);
@@ -20,10 +23,11 @@ const Payment = () => {
     const [selectedPlan, setSelectedPlan] = useState(null);
     const [showCheckout, setShowCheckout] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
-    const [userPlan, setUserPlan] = useState('free'); // Will be updated if user data is passed/fetched
+    const [userPlan, setUserPlan] = useState('free');
+    const [history, setHistory] = useState([]);
+    const [payments, setPayments] = useState([]);
 
     useEffect(() => {
-        // Fetch current user details to check their plan
         const fetchUserPlan = async () => {
             try {
                 const response = await axios.get(`${import.meta.env.VITE_BASE_URL}/user`, {
@@ -38,7 +42,21 @@ const Payment = () => {
                 console.error("Failed to fetch user plan", error);
             }
         };
+        const fetchHistory = async () => {
+            try {
+                const response = await axios.get(`${import.meta.env.VITE_BASE_URL}/api/payments/billing-history`, {
+                    withCredentials: true,
+                });
+                if (response.data.status === 'success') {
+                    setHistory(response.data.history || []);
+                    setPayments(response.data.data || []);
+                }
+            } catch (error) {
+                console.error("Failed to fetch history", error);
+            }
+        };
         fetchUserPlan();
+        fetchHistory();
     }, []);
 
     const plans = [
@@ -267,14 +285,28 @@ const Payment = () => {
             </div>
 
             {/* Plans Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 max-w-5xl mx-auto">
                 {plans.map((plan) => {
                     const isCurrent = plan.id === userPlan;
+                    let isDisabled = isCurrent || isLoading;
+                    let buttonText = isCurrent ? 'Current Plan' : `Get ${plan.name}`;
+
+                    if (userPlan !== 'free' && plan.id === 'free') {
+                        isDisabled = true;
+                    }
+                    if (userPlan === 'pro' && plan.id === 'basic') {
+                        isDisabled = true;
+                    }
+                    if (userPlan === 'basic' && plan.id === 'pro') {
+                        buttonText = `Upgrade to ${plan.name}`;
+                    }
+
                     return (
                     <div
                         key={plan.id}
-                        className={`group relative bg-white dark:bg-slate-800 rounded-2xl border-2 transition-all duration-300 hover:shadow-xl flex flex-col overflow-hidden ${plan.popular
-                                ? 'border-brand-primary shadow-lg shadow-brand-primary/10 scale-[1.02]'
+                        className={`group relative bg-white dark:bg-slate-800 rounded-2xl border-2 transition-all duration-300 hover:shadow-xl flex flex-col overflow-hidden ${
+                                plan.popular
+                                ? 'border-brand-primary shadow-lg shadow-brand-primary/10 sm:scale-[1.02]'
                                 : 'border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600'
                             } ${plan.bgGlow}`}
                     >
@@ -350,17 +382,17 @@ const Payment = () => {
                         <div className="px-6 pb-6 pt-2">
                             <button
                                 onClick={() => handleSelectPlan(plan)}
-                                disabled={isCurrent || isLoading}
-                                className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer ${isCurrent
+                                disabled={isDisabled}
+                                className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer ${isDisabled
                                         ? 'bg-gray-100 dark:bg-slate-700 text-gray-400 dark:text-gray-500 cursor-default'
                                         : plan.popular
                                             ? 'bg-gradient-to-r from-brand-primary to-brand-secondary text-white shadow-lg shadow-brand-primary/25 hover:shadow-xl hover:shadow-brand-primary/30 hover:scale-[1.02]'
                                             : 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-100 hover:scale-[1.02]'
                                     }`}
                             >
-                                {isCurrent ? 'Current Plan' : (
+                                {buttonText === 'Current Plan' ? 'Current Plan' : (
                                     <>
-                                        Get {plan.name} <ArrowRight size={16} />
+                                        {buttonText} <ArrowRight size={16} />
                                     </>
                                 )}
                             </button>
@@ -422,6 +454,71 @@ const Payment = () => {
                                 <Shield size={12} /> Secured by Razorpay
                             </p>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Subscription History Section */}
+            {(history.length > 0 || payments.length > 0) && (
+                <div className="max-w-5xl mx-auto mt-12 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden">
+                    <div className="p-6 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/50">
+                        <h2 className="text-xl font-bold text-black dark:text-white">Billing & Subscription History</h2>
+                        <p className="text-sm text-gray-500 mt-1">Review your past transactions and plan changes.</p>
+                    </div>
+                    <div className="overflow-x-auto -mx-4 sm:mx-0">
+                        <table className="w-full text-left text-sm min-w-[500px]">
+                            <thead className="bg-gray-50 dark:bg-slate-900/50 text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider">
+                                <tr>
+                                    <th className="px-6 py-4">Date</th>
+                                    <th className="px-6 py-4">Action/Plan</th>
+                                    <th className="px-6 py-4">Billing Cycle</th>
+                                    <th className="px-6 py-4">Status</th>
+                                    <th className="px-6 py-4 text-right">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-slate-700/50">
+                                {history.map((record) => (
+                                    <tr key={record._id} className="hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors">
+                                        <td className="px-6 py-4 text-gray-600 dark:text-gray-300">
+                                            {new Date(record.createdAt).toLocaleDateString()}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="font-bold text-black dark:text-white capitalize">{record.actionType}</span>
+                                            <span className="text-gray-500 ml-2">({record.oldPlan || 'none'} → {record.newPlan})</span>
+                                        </td>
+                                        <td className="px-6 py-4 capitalize text-gray-600 dark:text-gray-300">
+                                            {record.newBillingCycle || '-'}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="bg-green-100 text-green-700 px-2 py-1 rounded-md text-xs font-bold uppercase">Success</span>
+                                        </td>
+                                        <td className="px-6 py-4 text-right text-gray-600 dark:text-gray-300 font-bold">
+                                            -
+                                        </td>
+                                    </tr>
+                                ))}
+                                {payments.map((payment) => (
+                                    <tr key={payment._id} className="hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors">
+                                        <td className="px-6 py-4 text-gray-600 dark:text-gray-300">
+                                            {new Date(payment.createdAt).toLocaleDateString()}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="font-bold text-black dark:text-white capitalize">Payment</span>
+                                            <span className="text-gray-500 ml-2">({payment.plan})</span>
+                                        </td>
+                                        <td className="px-6 py-4 capitalize text-gray-600 dark:text-gray-300">
+                                            {payment.billingCycle}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="bg-green-100 text-green-700 px-2 py-1 rounded-md text-xs font-bold uppercase">{payment.status}</span>
+                                        </td>
+                                        <td className="px-6 py-4 text-right text-black dark:text-white font-extrabold">
+                                            ₹{payment.amount}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             )}

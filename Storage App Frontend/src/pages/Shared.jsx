@@ -174,17 +174,17 @@ const Shared = () => {
     };
 
     return (
-        <div className="space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-4 sm:space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                    <h1 className="text-3xl sm:text-4xl font-normal text-black dark:text-white mb-1">Shared Files</h1>
+                    <h1 className="text-2xl sm:text-3xl lg:text-4xl font-normal text-black dark:text-white mb-1">Shared Files</h1>
                     <p className="text-gray-500 dark:text-gray-400 font-bold text-sm">Access files shared with you or by you</p>
                 </div>
 
-                <div className="bg-gray-200 dark:bg-slate-800 p-1 rounded-xl flex gap-1 font-bold w-fit">
+                <div className="bg-gray-200 dark:bg-slate-800 p-1 rounded-xl flex gap-1 font-bold w-full sm:w-fit">
                     <button
                         onClick={() => setActiveTab('withMe')}
-                        className={`px-4 sm:px-6 py-2 rounded-lg transition-all text-sm sm:text-base ${activeTab === 'withMe'
+                        className={`flex-1 sm:flex-none px-3 sm:px-6 py-2 rounded-lg transition-all text-xs sm:text-sm ${activeTab === 'withMe'
                             ? 'bg-white dark:bg-slate-600 text-brand-primary shadow-sm'
                             : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                             }`}
@@ -193,7 +193,7 @@ const Shared = () => {
                     </button>
                     <button
                         onClick={() => setActiveTab('byMe')}
-                        className={`px-4 sm:px-6 py-2 rounded-lg transition-all text-sm sm:text-base ${activeTab === 'byMe'
+                        className={`flex-1 sm:flex-none px-3 sm:px-6 py-2 rounded-lg transition-all text-xs sm:text-sm ${activeTab === 'byMe'
                             ? 'bg-white dark:bg-slate-600 text-brand-primary shadow-sm'
                             : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                             }`}
@@ -204,17 +204,17 @@ const Shared = () => {
             </div>
 
             {/* Share Link Generation Card */}
-            <div className="bg-gradient-to-r from-brand-primary to-brand-secondary rounded-3xl p-6 sm:p-8 text-white shadow-lg mb-8 relative overflow-hidden">
-                <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-left">
+            <div className="bg-gradient-to-r from-brand-primary to-brand-secondary rounded-2xl sm:rounded-3xl p-5 sm:p-8 text-white shadow-lg mb-6 sm:mb-8 relative overflow-hidden">
+                <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                     <div>
-                        <h3 className="text-2xl font-bold mb-2">Share your memories instantly</h3>
-                        <p className="text-white/90 font-medium max-w-lg">Generate a secure, time-limited link for your photos and videos to share with friends and family.</p>
+                        <h3 className="text-lg sm:text-2xl font-bold mb-1 sm:mb-2">Share your memories instantly</h3>
+                        <p className="text-white/90 font-medium max-w-lg text-sm sm:text-base">Generate a secure, time-limited link for your photos and videos to share with friends and family.</p>
                     </div>
-                    <button onClick={() => handleGenerateLink()} className="bg-white text-brand-primary px-6 py-3 rounded-xl font-bold shadow-md hover:bg-gray-50 transition-colors flex items-center gap-2">
-                        <LinkIcon size={20} /> Generate Link
+                    <button onClick={() => handleGenerateLink()} className="bg-white text-brand-primary px-5 py-2.5 rounded-xl font-bold shadow-md hover:bg-gray-50 transition-colors flex items-center gap-2 shrink-0 text-sm sm:text-base">
+                        <LinkIcon size={18} /> Generate Link
                     </button>
                 </div>
-                <Share2 className="absolute -bottom-8 -right-8 text-white/20 w-48 h-48 rotate-12" />
+                <Share2 className="absolute -bottom-8 -right-8 text-white/20 w-36 h-36 sm:w-48 sm:h-48 rotate-12" />
             </div>
 
             {/* Loading State */}
