@@ -58,8 +58,8 @@ const Sidebar = () => {
           fixed lg:static inset-y-0 left-0 z-50
           bg-gray-100 dark:bg-slate-900 border-r border-gray-200 dark:border-slate-800
           flex flex-col pt-6 pb-6 px-4 shrink-0 font-sans
-          transition-all duration-300 ease-in-out relative
-          ${isMobileMenuOpen ? 'translate-x-0 w-64' : '-translate-x-full lg:translate-x-0'}
+          transition-all duration-300 ease-in-out
+          ${isMobileMenuOpen ? 'translate-x-0 w-64' : '-translate-x-full w-64 lg:translate-x-0'}
           ${isSidebarHidden ? 'lg:-translate-x-full lg:w-0 lg:overflow-hidden lg:opacity-0 lg:p-0'
             : isSidebarCollapsed ? 'lg:w-[4.5rem] lg:px-2' : 'lg:w-64'}
         `}

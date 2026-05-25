@@ -364,7 +364,7 @@ const MyFiles = () => {
     }
 
     return (
-        <div className="flex relative h-full gap-4 transition-all duration-300 overflow-hidden">
+        <div className="flex relative h-full gap-0 lg:gap-4 transition-all duration-300 overflow-hidden">
             {/* Main Content Area */}
             <div className="flex-1 min-w-0 space-y-8 dark:text-gray-100 relative h-full overflow-y-auto pr-2 pb-20">
                 {/* Hidden Inputs */}

@@ -514,7 +514,7 @@ const Dashboard = () => {
     }
 
     return (
-        <div className="flex relative h-full gap-4 transition-all duration-300 overflow-hidden">
+        <div className="flex relative h-full gap-0 lg:gap-4 transition-all duration-300 overflow-hidden">
             {/* Main Content Area */}
             <div className="flex-1 min-w-0 space-y-8 dark:text-gray-100 relative h-full overflow-y-auto overflow-x-hidden pr-2 pb-20">
                 {/* Hidden Inputs */}
@@ -602,7 +602,7 @@ const Dashboard = () => {
                             </h3>
                             <p className="text-gray-500 dark:text-gray-400 font-bold mb-4 sm:mb-8 text-sm hidden sm:block">Drag and drop files here, or click to select files</p>
 
-                            <div className="flex flex-col xs:flex-row sm:flex-row gap-2 sm:gap-3 w-full justify-center max-w-2xl">
+                            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full justify-center max-w-2xl">
                                 <button
                                     onClick={() => fileInputRef.current?.click()}
                                     className="flex-1 bg-brand-primary hover:bg-brand-secondary text-white py-3 sm:py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-brand-primary/20 transition-all active:scale-95">

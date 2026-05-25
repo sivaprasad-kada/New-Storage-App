@@ -250,8 +250,8 @@ const Header = () => {
             </div>
 
             {/* Search Bar - hidden on mobile, visible from sm */}
-            <div className={`hidden sm:flex flex-1 max-w-2xl transition-all duration-300 relative z-20 ${searchFocus ? 'mx-0' : 'mx-4 lg:mx-12'}`} ref={searchContainerRef}>
-                <div className={`relative transition-all duration-200 ${searchFocus ? 'scale-100 sm:scale-105' : 'scale-100'}`}>
+            <div className={`hidden sm:flex flex-1 min-w-0 max-w-2xl transition-all duration-300 relative z-20 ${searchFocus ? 'mx-0' : 'mx-4 lg:mx-12'}`} ref={searchContainerRef}>
+                <div className={`w-full relative transition-all duration-200 ${searchFocus ? 'scale-100 sm:scale-105' : 'scale-100'}`}>
                     <div className="flex items-center w-full bg-white dark:bg-slate-800 rounded-full border border-brand-primary px-2 sm:px-4 py-2 shadow-sm transition-colors">
                         <Search className="text-gray-400 ml-1 sm:ml-2 shrink-0" size={18} />
                         <input
