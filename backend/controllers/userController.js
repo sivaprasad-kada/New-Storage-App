@@ -68,6 +68,8 @@ export const register = async (req, res, next) => {
     res.cookie("token", newSession.id, {
       httpOnly: true,
       signed: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000 // 1 hour
     });
     
@@ -115,6 +117,8 @@ export const login = async (req, res) => {
   res.cookie("token", session.id, {
     httpOnly: true,
     signed: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
     maxAge: 7 * 24 * 60 * 60 * 1000
   });
   res.json({ message: "logged in" });
@@ -143,7 +147,12 @@ export const logout = async (req, res) => {
   if (token) {
     await sessionSchema.findByIdAndDelete(token).catch(() => {});
   }
-  res.clearCookie("token", { httpOnly: true, signed: true });
+  res.clearCookie("token", {
+    httpOnly: true,
+    signed: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax"
+  });
   return res.status(204).end();
 };
 export const logoutAll = async (req, res) => {
@@ -210,6 +219,8 @@ export const googleLogin = async (req, res, next) => {
       res.cookie("token", session.id, {
         httpOnly: true,
         signed: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
         maxAge: 7 * 24 * 60 * 60 * 1000,
       });
       res.status(201).json({ message: "User Registered" });
@@ -237,6 +248,8 @@ export const googleLogin = async (req, res, next) => {
     res.cookie("token", session.id, {
       httpOnly: true,
       signed: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000
     });
     res.json({ message: "logged in" });
@@ -364,6 +377,8 @@ export const gitHubCallback = async (req, res) => {
         res.cookie("token", session.id, {
           httpOnly: true,
           signed: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
           maxAge: 7 * 24 * 60 * 60 * 1000
         });
 
@@ -400,6 +415,8 @@ export const gitHubCallback = async (req, res) => {
     res.cookie("token", session.id, {
       httpOnly: true,
       signed: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000
     });
 

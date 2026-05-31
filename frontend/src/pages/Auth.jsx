@@ -123,7 +123,7 @@ const Auth = () => {
     };
     const handleGitHubLogin = () => {
         const CLIENT_ID = "Ov23lih57kAGvNVuYKTJ";
-        const REDIRECT_URI = "http://localhost:5173/user/github/callback";
+        const REDIRECT_URI = `${window.location.origin}/user/github/callback`;
 
         const authUrl = `https://github.com/login/oauth/authorize?client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}&scope=user:email`;
 
@@ -134,7 +134,7 @@ const Auth = () => {
         );
 
         const receiveMessage = async (event) => {
-            if (event.origin !== "http://localhost:5173") return;
+            if (event.origin !== window.location.origin) return;
 
             const { code } = event.data;
             if (code) {
@@ -187,7 +187,7 @@ const Auth = () => {
         setOtp("");
         setTimer(0);
     };
-    const BASE_URL = "http://localhost:5000";
+    const BASE_URL = import.meta.env.VITE_BASE_URL;
     const handleFormSubmit = (e) => {
         e.preventDefault();
         if (isSignIn) {

@@ -5,21 +5,25 @@ export default async function checkAuth(req, res, next) {
   // console.log("token from auth",token);
   // console.log("token is ",token)
   if (!token) {
-    res.clearCookie("token")
+    res.clearCookie("token", {
+      httpOnly: true,
+      signed: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax"
+    });
     return res.status(401).json({ error: "Not logged!" });
   }
   try {
-    // decode
-  /*   const decoded = JSON.parse(Buffer.from(token, "base64url").toString());
-    const { id, expiry } = decoded;
-    const now = Math.round(Date.now() / 1000);
-
-    if (now > expiry) {
-      res.clearCookie("token");
-      return res.status(401).json({ error: "Session expired!" });
-    } */
     const session = await sessionSchema.findById(token);
-    if(!session) return res.clearCookie("token")
+    if (!session) {
+      res.clearCookie("token", {
+        httpOnly: true,
+        signed: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax"
+      });
+      return res.status(401).json({ error: "Invalid session!" });
+    }
     const user = await User.findById(session.userId);
     if (!user) return res.status(401).json({ error: "User not found!" });
     req.user = user;

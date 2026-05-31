@@ -7,7 +7,7 @@ function GithubCallback() {
 
         if (code && window.opener) {
             // send code to main window
-            window.opener.postMessage({ code }, "http://localhost:5173");
+            window.opener.postMessage({ code }, window.location.origin);
             window.close(); // close popup after sending
         }
     }, []);
