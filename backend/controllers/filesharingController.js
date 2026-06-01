@@ -289,7 +289,7 @@ export const inviteUser = async (req, res) => {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: "Email is required" });
     
-    const resend = new Resend("re_L6DfoHXJ_AnG7PFijdb7R3MujbhkwvyuL");
+    const resend = new Resend(process.env.RESEND_API_KEY);
     const signupLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/auth`;
     await resend.emails.send({
       from: "Storage App <otp@sivaprasadkada.tech>",

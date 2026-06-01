@@ -16,7 +16,7 @@ import searchRoutes from "./routes/searchRoutes.js";
 import apiFilesRoutes from "./routes/apiFilesRoutes.js";
 import "./config/mongoose.js";
 try {
-  const secretkey = "sivaprasadkada";
+  const secretkey = process.env.COOKIE_SECRET || "sivaprasadkada";
   const db = await connectDB();
 
   const app = express();

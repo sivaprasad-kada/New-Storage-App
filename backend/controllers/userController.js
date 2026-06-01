@@ -299,8 +299,8 @@ export const gitHubCallback = async (req, res) => {
     const tokenResponse = await axios.post(
       "https://github.com/login/oauth/access_token",
       {
-        client_id: "Ov23lih57kAGvNVuYKTJ",
-        client_secret: "38037e80b304933958ef06fe775918706bc8c6ef",
+        client_id: process.env.GITHUB_CLIENT_ID,
+        client_secret: process.env.GITHUB_CLIENT_SECRET,
         code
       },
       { headers: { Accept: "application/json" } }
