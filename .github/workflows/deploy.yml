@@ -26,6 +26,11 @@ jobs:
         run: npm ci
 
       - name: Build Frontend
+        env:
+          VITE_BASE_URL: ${{ secrets.VITE_BASE_URL }}
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
+          VITE_RAZORPAY_KEY_ID: ${{ secrets.VITE_RAZORPAY_KEY_ID }}
+          VITE_GITHUB_CLIENT_ID: ${{ secrets.VITE_GITHUB_CLIENT_ID }}
         run: npm run build
 
       - name: Configure AWS Credentials
@@ -66,4 +71,4 @@ jobs:
 
             npm ci
 
-            pm2 restart cloudvault-api
+            pm2 restart cloudvault-api --update-env
