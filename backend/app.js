@@ -39,6 +39,9 @@ try {
     req.db = db;
     next();
   });
+  app.get("/health", (req, res) => {
+    res.status(200).json({ status: "OK", message: "Backend is running" });
+  });
   app.use("/directory", checkAuth, directoryRoutes);
   app.use("/file", checkAuth, fileRoutes);
   app.use("/", userRoutes);
