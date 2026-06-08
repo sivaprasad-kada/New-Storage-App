@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Search, Bell, User, Menu, ChevronDown, Check, LogOut, Settings, File, Folder, Image as ImageIcon } from 'lucide-react';
+import { Search, Bell, User, Menu, ChevronDown, Check, LogOut, Settings, File, Folder, Image as ImageIcon, Cloud } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import AlertModal from './AlertModal';
@@ -236,14 +236,7 @@ const Header = () => {
 
                 <div className="flex items-center gap-2 shrink-0">
                     <div className="text-brand-primary">
-                        {/* Refined Geometric Logo Object */}
-                        <svg width="36" height="36" viewBox="0 0 24 24" fill="currentColor" className="drop-shadow-sm">
-                            <path d="M12 2L2 7V17L12 22L22 17V7L12 2Z" fill="var(--color-brand-primary)" opacity="0.2" />
-                            <path d="M12 22V12M12 22L2 17M12 22L22 17" stroke="var(--color-brand-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                            <path d="M2 7L12 12L22 7" stroke="var(--color-brand-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                            <path d="M12 2V12" stroke="var(--color-brand-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                            <circle cx="12" cy="12" r="3" fill="var(--color-brand-primary)" />
-                        </svg>
+                        <Cloud size={36} className="text-brand-primary" fill="currentColor" />
                     </div>
                     <span className="hidden sm:block text-2xl sm:text-3xl font-extrabold text-brand-primary tracking-tight font-mono whitespace-nowrap">Cloud Drive</span>
                 </div>

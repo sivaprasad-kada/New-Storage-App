@@ -547,7 +547,7 @@ const Dashboard = () => {
                         {dirId ? directoryName : "Welcome to Cloud Drive"}
                     </h1>
                     <div className="flex items-baseline gap-2 flex-wrap">
-                        {!dirId && <h2 className="text-xl sm:text-4xl font-bold text-black dark:text-gray-200"><span className="hidden sm:inline">An </span><span className="text-brand-primary">Ai</span> powered Cloud Drive</h2>}
+                        {!dirId && <h2 className="text-xl sm:text-4xl font-bold text-brand-primary">Cloud Drive</h2>}
                         {dirId && <p className="text-gray-500 font-medium">Inside {directoryName}</p>}
                     </div>
                 </div>
