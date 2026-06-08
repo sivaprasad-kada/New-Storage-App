@@ -25,7 +25,7 @@ export const createUploadSignedUrl = async ({ key, contentType }) => {
     });
     
     console.log("Access Key ID:", process.env.AWS_ACCESS_KEY_ID);
-    copnsole.log("Secret Access Key:", process.env.AWS_SECRET_ACCESS_KEY);
+    console.log("Secret Access Key:", process.env.AWS_SECRET_ACCESS_KEY);
     console.log(`Generating S3 Upload URL for ${key} in ${process.env.AWS_REGION} bucket ${process.env.AWS_S3_BUCKET}`);
 
     const url = await getSignedUrl(s3Client, command, {
